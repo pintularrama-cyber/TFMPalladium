@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Palladium Hotel Group — Reserva tu hotel</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f4f6f9;color:#2c3e50;}
+
+/* NAV */
+.nav{background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.08);position:sticky;top:0;z-index:100;padding:0 40px;}
+.nav-inner{max-width:1280px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:64px;}
+.nav-logo{font-size:22px;font-weight:800;color:#2c3e50;letter-spacing:-.5px;display:flex;align-items:center;gap:10px;}
+.nav-logo span{color:#3498db;}
+.nav-right{display:flex;align-items:center;gap:16px;}
+.nav-link{color:#7f8c8d;text-decoration:none;font-size:14px;font-weight:500;transition:color .2s;}
+.nav-link:hover{color:#3498db;}
+.btn-login{background:#2c3e50;color:#fff;padding:9px 22px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;transition:background .2s;}
+.btn-login:hover{background:#3498db;}
+
+/* HERO */
+.hero{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 40%,#0f3460 100%);padding:80px 40px 0;min-height:420px;position:relative;overflow:hidden;}
+.hero::before{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");}
+.hero-content{max-width:1280px;margin:0 auto;position:relative;z-index:1;}
+.hero h1{font-size:44px;font-weight:800;color:#fff;line-height:1.15;margin-bottom:12px;}
+.hero h1 em{color:#3498db;font-style:normal;}
+.hero p{font-size:17px;color:rgba(255,255,255,.7);margin-bottom:36px;}
+
+/* SEARCH BOX */
+.search-box{background:#fff;border-radius:16px;padding:20px 24px;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;max-width:960px;}
+.s-field{display:flex;flex-direction:column;gap:5px;flex:1;min-width:140px;}
+.s-field label{font-size:11px;font-weight:700;color:#7f8c8d;text-transform:uppercase;letter-spacing:.6px;}
+.s-field input,.s-field select{border:1.5px solid #ecf0f1;border-radius:8px;padding:10px 12px;font-size:14px;color:#2c3e50;background:#f8f9fa;outline:none;width:100%;}
+.s-field input:focus,.s-field select:focus{border-color:#3498db;background:#fff;}
+.s-field .s-sep{color:#bdc3c7;font-size:18px;align-self:center;padding:0 4px;}
+.btn-search{background:linear-gradient(135deg,#3498db,#2980b9);color:#fff;border:none;padding:12px 32px;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;white-space:nowrap;transition:transform .15s,box-shadow .15s;}
+.btn-search:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(52,152,219,.4);}
+
+/* WAVE */
+.hero-wave{display:block;margin-top:40px;}
+
+/* SECTION */
+.section{max-width:1280px;margin:0 auto;padding:50px 40px;}
+.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px;}
+.section-head h2{font-size:26px;font-weight:800;color:#2c3e50;}
+.results-info{font-size:14px;color:#7f8c8d;display:none;}
+.results-info.show{display:block;}
+
+/* FILTERS */
+.filter-bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px;}
+.filter-chip{background:#fff;border:1.5px solid #ecf0f1;border-radius:20px;padding:7px 16px;font-size:13px;font-weight:600;color:#7f8c8d;cursor:pointer;transition:all .2s;}
+.filter-chip:hover,.filter-chip.active{background:#3498db;border-color:#3498db;color:#fff;}
+
+/* HOTEL CARDS GRID */
+.hotels-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:24px;}
+.hotel-card{background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.07);transition:transform .2s,box-shadow .2s;cursor:pointer;}
+.hotel-card:hover{transform:translateY(-6px);box-shadow:0 16px 40px rgba(0,0,0,.14);}
+.hotel-card.hidden{display:none;}
+
+/* CARD IMAGE */
+.card-img{height:190px;position:relative;display:flex;align-items:flex-end;padding:16px;}
+.card-img::after{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,rgba(0,0,0,.65) 100%);}
+.card-tag{background:rgba(255,255,255,.95);color:#2c3e50;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;z-index:1;position:relative;}
+.card-fav{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.9);border:none;border-radius:50%;width:34px;height:34px;font-size:16px;cursor:pointer;z-index:1;display:flex;align-items:center;justify-content:center;transition:background .2s;}
+.card-fav:hover{background:#fff;}
+.card-stars{position:absolute;top:14px;left:14px;z-index:1;display:flex;gap:2px;}
+.card-stars span{color:#f39c12;font-size:13px;}
+
+/* CARD BODY */
+.card-body{padding:18px 20px 20px;}
+.card-pais{font-size:12px;color:#7f8c8d;margin-bottom:3px;display:flex;align-items:center;gap:5px;}
+.card-nom{font-size:17px;font-weight:800;color:#2c3e50;margin-bottom:6px;line-height:1.2;}
+.card-desc{font-size:13px;color:#7f8c8d;line-height:1.5;margin-bottom:14px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.card-footer{display:flex;align-items:center;justify-content:space-between;}
+.card-precio{display:flex;align-items:baseline;gap:4px;}
+.card-precio .desde{font-size:11px;color:#95a5a6;}
+.card-precio .num{font-size:22px;font-weight:800;color:#2c3e50;}
+.card-precio .unit{font-size:12px;color:#7f8c8d;}
+.btn-reservar{background:linear-gradient(135deg,#27ae60,#2ecc71);color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;transition:transform .15s,box-shadow .15s;}
+.btn-reservar:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(39,174,96,.35);}
+
+/* EMPTY STATE */
+#no-results{display:none;text-align:center;padding:60px 20px;color:#bdc3c7;grid-column:1/-1;}
+#no-results.show{display:block;}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(15,12,41,.6);z-index:500;backdrop-filter:blur(4px);}
+.modal-overlay.open{display:flex;align-items:center;justify-content:center;}
+.modal{background:#fff;border-radius:20px;width:90%;max-width:560px;max-height:92vh;overflow-y:auto;box-shadow:0 40px 80px rgba(0,0,0,.35);}
+.modal-img{height:180px;position:relative;display:flex;align-items:flex-end;padding:20px;}
+.modal-img::after{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,transparent 30%,rgba(0,0,0,.7) 100%);}
+.modal-img-text{position:relative;z-index:1;color:#fff;}
+.modal-img-text h3{font-size:22px;font-weight:800;margin-bottom:2px;}
+.modal-img-text p{font-size:13px;opacity:.85;}
+.modal-close{position:absolute;top:14px;right:16px;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:20px;width:36px;height:36px;border-radius:50%;cursor:pointer;z-index:1;backdrop-filter:blur(4px);}
+.modal-body{padding:24px 28px;}
+.modal-body h4{font-size:14px;font-weight:700;color:#2c3e50;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #f0f3f7;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+.form-row.one{grid-template-columns:1fr;}
+.f-group{display:flex;flex-direction:column;gap:5px;}
+.f-group label{font-size:11px;font-weight:700;color:#95a5a6;text-transform:uppercase;letter-spacing:.5px;}
+.f-group input,.f-group select{border:1.5px solid #ecf0f1;border-radius:8px;padding:10px 12px;font-size:14px;color:#2c3e50;background:#f8f9fa;outline:none;}
+.f-group input:focus,.f-group select:focus{border-color:#3498db;background:#fff;}
+.f-group input[readonly]{background:#f0f3f7;color:#7f8c8d;cursor:default;}
+.price-preview{background:linear-gradient(135deg,#f0f9ff,#e8f4fd);border-radius:12px;padding:14px 16px;margin:16px 0;display:flex;justify-content:space-between;align-items:center;}
+.price-preview .label{font-size:12px;color:#7f8c8d;}
+.price-preview .total{font-size:22px;font-weight:800;color:#2c3e50;}
+.price-preview .nights{font-size:12px;color:#3498db;font-weight:600;}
+.btn-confirmar{width:100%;background:linear-gradient(135deg,#3498db,#2980b9);color:#fff;border:none;padding:15px;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;transition:transform .15s,box-shadow .15s;margin-top:4px;}
+.btn-confirmar:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(52,152,219,.45);}
+.btn-confirmar:disabled{background:#bdc3c7;cursor:not-allowed;transform:none;box-shadow:none;}
+
+/* RESULT */
+.result-box{display:none;background:#f8f9fa;border-radius:14px;padding:22px 20px;margin-top:16px;text-align:center;}
+.result-box.show{display:block;}
+.result-box h4{font-size:18px;font-weight:800;color:#2c3e50;margin-bottom:4px;}
+.result-box p{font-size:13px;color:#7f8c8d;margin-bottom:16px;}
+.result-ok{color:#27ae60;}
+.result-warn{color:#f39c12;}
+.result-info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;text-align:left;}
+.result-info-item{background:#fff;border-radius:8px;padding:10px 12px;}
+.result-info-item .r-label{font-size:10px;color:#95a5a6;text-transform:uppercase;letter-spacing:.5px;}
+.result-info-item .r-val{font-size:14px;font-weight:700;color:#2c3e50;margin-top:2px;}
+.btn-nueva{background:#f0f3f7;color:#2c3e50;border:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;margin-top:12px;transition:background .2s;}
+.btn-nueva:hover{background:#e0e6ed;}
+
+/* FOOTER */
+.footer-pub{background:#1a1a2e;color:rgba(255,255,255,.5);text-align:center;padding:28px 20px;font-size:12px;margin-top:60px;}
+.footer-pub strong{color:rgba(255,255,255,.8);}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+    .hero h1{font-size:28px;}
+    .search-box{flex-direction:column;}
+    .btn-search{width:100%;}
+    .section{padding:30px 20px;}
+    .nav{padding:0 20px;}
+    .hotels-grid{grid-template-columns:1fr;}
+    .modal{width:96%;border-radius:16px;}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+    <div class="nav-inner">
+        <div class="nav-logo">🏨 Palladium<span>Hotels</span></div>
+        <div class="nav-right">
+            <span class="nav-link" style="font-size:13px;color:#95a5a6;">¿Eres empleado?</span>
+            <a href="{{ url_for('login') }}" class="btn-login">🔐 Acceso empleados</a>
+        </div>
+    </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+    <div class="hero-content">
+        <h1>Tu próxima escapada<br>en un <em>Palladium</em></h1>
+        <p>12 destinos exclusivos · Todo incluido · Adultos y familias</p>
+
+        <div class="search-box">
+            <div class="s-field" style="flex:2;min-width:180px;">
+                <label>Destino o hotel</label>
+                <input type="text" id="s-destino" placeholder="Ej: Ibiza, México, Caribe…" oninput="filtrarCards()">
+            </div>
+            <div class="s-field">
+                <label>Check-in</label>
+                <input type="date" id="s-checkin" onchange="calcNochesHero()">
+            </div>
+            <div class="s-field">
+                <label>Check-out</label>
+                <input type="date" id="s-checkout" onchange="calcNochesHero()">
+            </div>
+            <div class="s-field" style="max-width:100px;">
+                <label>Adultos</label>
+                <select id="s-adultos">
+                    <option value="1">1</option>
+                    <option value="2" selected>2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                    <option value="8">8</option>
+                    <option value="9">9</option>
+                    <option value="10">10</option>
+                </select>
+            </div>
+            <div class="s-field" style="max-width:90px;">
+                <label>Niños</label>
+                <select id="s-ninos">
+                    <option value="0" selected>0</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                </select>
+            </div>
+            <button class="btn-search" onclick="buscar()">🔍 Buscar</button>
+        </div>
+    </div>
+
+    <svg class="hero-wave" viewBox="0 0 1440 54" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+        <path d="M0 54L48 45C96 36 192 18 288 13.5C384 9 480 18 576 22.5C672 27 768 27 864 22.5C960 18 1056 9 1152 9C1248 9 1344 18 1392 22.5L1440 27V54H0Z" fill="#f4f6f9"/>
+    </svg>
+</section>
+
+<!-- HOTELS SECTION -->
+<section class="section">
+    <div class="section-head">
+        <h2>🌍 Nuestros hoteles</h2>
+        <span class="results-info" id="results-info"></span>
+    </div>
+
+    <!-- FILTROS POR ZONA -->
+    <div class="filter-bar">
+        <button class="filter-chip active" onclick="filtrarZona('todos', this)">Todos</button>
+        <button class="filter-chip" onclick="filtrarZona('España', this)">🇪🇸 España</button>
+        <button class="filter-chip" onclick="filtrarZona('México', this)">🇲🇽 México</button>
+        <button class="filter-chip" onclick="filtrarZona('Rep. Dom.', this)">🇩🇴 Caribe</button>
+        <button class="filter-chip" onclick="filtrarZona('Brasil', this)">🇧🇷 Brasil</button>
+        <button class="filter-chip" onclick="filtrarZona('Jamaica', this)">🇯🇲 Jamaica</button>
+        <button class="filter-chip" onclick="filtrarZona('adults', this)">Adults only</button>
+    </div>
+
+    <div class="hotels-grid" id="hotels-grid">
+
+        {% for hid, h in hoteles.items() %}
+        <div class="hotel-card"
+             data-hid="{{ hid }}"
+             data-nom="{{ h.nom|lower }}"
+             data-loc="{{ h.loc|lower }}"
+             data-tag="{{ h.tag|lower }}"
+             onclick="abrirModal({{ hid }})">
+
+            <!-- Imagen CSS -->
+            <div class="card-img" style="background:{{ h.grad }};">
+                <div class="card-stars">{% for i in range(h.estrellas) %}<span>★</span>{% endfor %}</div>
+                <button class="card-fav" onclick="event.stopPropagation();this.textContent=this.textContent=='♡'?'❤️':'♡'">♡</button>
+                <span class="card-tag">{{ h.tag }}</span>
+            </div>
+
+            <div class="card-body">
+                <div class="card-pais">{{ h.pais }} {{ h.loc }}</div>
+                <div class="card-nom">{{ h.nom }}</div>
+                <div class="card-desc">{{ h.desc }}</div>
+                <div class="card-footer">
+                    <div class="card-precio">
+                        <span class="desde">Desde</span>
+                        <span class="num">${{ h.precio }}</span>
+                        <span class="unit">USD/noche</span>
+                    </div>
+                    <button class="btn-reservar" onclick="event.stopPropagation();abrirModal({{ hid }})">Reservar</button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        <div id="no-results"><div style="font-size:48px;margin-bottom:12px;">🔍</div><p style="font-size:16px;color:#7f8c8d;">No hay hoteles que coincidan con tu búsqueda.</p></div>
+    </div>
+</section>
+
+<!-- FOOTER -->
+<div class="footer-pub">
+    <p><strong>Palladium Hotel Group</strong> · Reservas online seguras · © 2024</p>
+    <p style="margin-top:6px;font-size:11px;">¿Eres empleado? <a href="{{ url_for('login') }}" style="color:#3498db;">Accede al panel interno →</a></p>
+</div>
+
+<!-- MODAL DE RESERVA -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)cerrarModal()">
+<div class="modal" id="modal">
+
+    <!-- Cabecera con imagen -->
+    <div class="modal-img" id="modal-img">
+        <button class="modal-close" onclick="cerrarModal()">✕</button>
+        <div class="modal-img-text">
+            <h3 id="modal-nom">—</h3>
+            <p id="modal-loc">—</p>
+        </div>
+    </div>
+
+    <div class="modal-body" id="modal-form-area">
+        <h4>✈️ Datos de la reserva</h4>
+
+        <div class="form-row">
+            <div class="f-group">
+                <label>Check-in</label>
+                <input type="date" id="m-checkin" onchange="calcModal()">
+            </div>
+            <div class="f-group">
+                <label>Check-out</label>
+                <input type="date" id="m-checkout" onchange="calcModal()">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="f-group">
+                <label>Adultos</label>
+                <select id="m-adultos" onchange="calcModal()">
+                    <option value="1">1 adulto</option>
+                    <option value="2" selected>2 adultos</option>
+                    <option value="3">3 adultos</option>
+                    <option value="4">4 adultos</option>
+                    <option value="5">5 adultos</option>
+                    <option value="6">6 adultos</option>
+                    <option value="7">7 adultos</option>
+                    <option value="8">8 adultos</option>
+                    <option value="9">9 adultos</option>
+                    <option value="10">10 adultos</option>
+                </select>
+            </div>
+            <div class="f-group">
+                <label>Niños</label>
+                <select id="m-ninos">
+                    <option value="0" selected>Sin niños</option>
+                    <option value="1">1 niño</option>
+                    <option value="2">2 niños</option>
+                    <option value="3">3 niños</option>
+                    <option value="4">4 niños</option>
+                    <option value="5">5 niños</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="f-group">
+                <label>País de origen</label>
+                <select id="m-pais">
+                    <option value="">Selecciona país</option>
+                    <option value="España">🇪🇸 España</option>
+                    <option value="Francia">🇫🇷 Francia</option>
+                    <option value="Alemania">🇩🇪 Alemania</option>
+                    <option value="Italia">🇮🇹 Italia</option>
+                    <option value="Reino Unido">🇬🇧 Reino Unido</option>
+                    <option value="USA">🇺🇸 Estados Unidos</option>
+                    <option value="Mexico">🇲🇽 México</option>
+                    <option value="Brasil">🇧🇷 Brasil</option>
+                    <option value="Argentina">🇦🇷 Argentina</option>
+                    <option value="Otros">🌍 Otro</option>
+                </select>
+            </div>
+            <div class="f-group">
+                <label>Noches</label>
+                <input type="text" id="m-noches" value="—" readonly>
+            </div>
+        </div>
+
+        <div class="price-preview" id="price-preview" style="display:none;">
+            <div>
+                <div class="label">Total estimado</div>
+                <div class="total" id="price-total">—</div>
+                <div class="nights" id="price-nights">— noches · — adultos</div>
+            </div>
+            <div style="font-size:28px;">🏨</div>
+        </div>
+
+        <button class="btn-confirmar" id="btn-confirmar" onclick="confirmarReserva()">Confirmar reserva</button>
+
+        <!-- RESULTADO -->
+        <div class="result-box" id="result-box">
+            <div style="font-size:40px;margin-bottom:8px;" id="result-icon">✅</div>
+            <h4 id="result-title">¡Reserva confirmada!</h4>
+            <p id="result-subtitle">Tu solicitud ha sido procesada correctamente.</p>
+            <div class="result-info-grid" id="result-grid"></div>
+            <button class="btn-nueva" onclick="resetModal()">Hacer otra reserva</button>
+        </div>
+    </div>
+
+</div>
+</div>
+
+<script>
+// ── Datos hoteles ──
+const HOTELES = {{ hoteles | tojson }};
+let hotelActivo = null;
+let zonaActiva = 'todos';
+let textoActivo = '';
+
+// ── Fechas por defecto (hoy + 30 días)  ──
+(function(){
+    const hoy = new Date();
+    const checkin = new Date(hoy); checkin.setDate(hoy.getDate()+30);
+    const checkout = new Date(checkin); checkout.setDate(checkin.getDate()+7);
+    const fmt = d => d.toISOString().slice(0,10);
+    document.getElementById('s-checkin').value = fmt(checkin);
+    document.getElementById('s-checkout').value = fmt(checkout);
+    document.getElementById('s-checkin').min = fmt(hoy);
+    document.getElementById('s-checkout').min = fmt(hoy);
+})();
+
+// ── Normaliza texto: minúsculas + sin acentos ──
+function norm(s) {
+    return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+// ── Filtros ──
+function filtrarCards() {
+    textoActivo = norm(document.getElementById('s-destino').value.trim());
+    aplicarFiltros();
+}
+
+function filtrarZona(zona, btn) {
+    zonaActiva = zona;
+    document.querySelectorAll('.filter-chip').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    aplicarFiltros();
+}
+
+function aplicarFiltros() {
+    const cards = document.querySelectorAll('.hotel-card');
+    let visibles = 0;
+    cards.forEach(c => {
+        const nom = norm(c.dataset.nom);
+        const loc = norm(c.dataset.loc);
+        const tag = norm(c.dataset.tag);
+        const matchText = !textoActivo || nom.includes(textoActivo) || loc.includes(textoActivo);
+        let matchZona = true;
+        if (zonaActiva !== 'todos') {
+            if (zonaActiva === 'adults') matchZona = tag.includes('adult');
+            else matchZona = loc.includes(norm(zonaActiva));
+        }
+        const visible = matchText && matchZona;
+        c.classList.toggle('hidden', !visible);
+        if (visible) visibles++;
+    });
+    const info = document.getElementById('results-info');
+    info.textContent = visibles + ' hotel' + (visibles !== 1 ? 'es' : '') + ' encontrado' + (visibles !== 1 ? 's' : '');
+    info.classList.toggle('show', textoActivo !== '' || zonaActiva !== 'todos');
+    document.getElementById('no-results').classList.toggle('show', visibles === 0);
+}
+
+function buscar() {
+    filtrarCards();
+    document.getElementById('hotels-grid').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function calcNochesHero() {}
+
+// ── Modal ──
+function abrirModal(hid) {
+    hotelActivo = hid;
+    const h = HOTELES[hid];
+    if (!h) return;
+
+    document.getElementById('modal-nom').textContent = h.nom;
+    document.getElementById('modal-loc').textContent = h.pais + '  ' + h.loc;
+    document.getElementById('modal-img').style.background = h.grad;
+
+    // Pre-rellenar fechas del buscador
+    const ci = document.getElementById('s-checkin').value;
+    const co = document.getElementById('s-checkout').value;
+    document.getElementById('m-checkin').value  = ci;
+    document.getElementById('m-checkout').value = co;
+    document.getElementById('m-adultos').value  = document.getElementById('s-adultos').value;
+    document.getElementById('m-ninos').value    = document.getElementById('s-ninos').value;
+
+    resetModal(false);
+    calcModal();
+    document.getElementById('modal-overlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+
+function cerrarModal() {
+    document.getElementById('modal-overlay').classList.remove('open');
+    document.body.style.overflow = '';
+    hotelActivo = null;
+}
+
+function calcModal() {
+    const ci = document.getElementById('m-checkin').value;
+    const co = document.getElementById('m-checkout').value;
+    const adults = parseInt(document.getElementById('m-adultos').value) || 2;
+    if (!ci || !co) return;
+    const noches = Math.max(1, Math.round((new Date(co)-new Date(ci))/(1000*60*60*24)));
+    document.getElementById('m-noches').value = noches + ' noche' + (noches !== 1 ? 's' : '');
+    if (hotelActivo && HOTELES[hotelActivo]) {
+        const precio = HOTELES[hotelActivo].precio;
+        const total = precio * noches * adults;
+        document.getElementById('price-total').textContent = '$' + total.toLocaleString('es-ES') + ' USD';
+        document.getElementById('price-nights').textContent = noches + ' noche' + (noches!==1?'s':'') + ' · ' + adults + ' adulto' + (adults!==1?'s':'');
+        document.getElementById('price-preview').style.display = 'flex';
+    }
+}
+
+function resetModal(resetFechas=true) {
+    document.getElementById('result-box').classList.remove('show');
+    document.getElementById('btn-confirmar').style.display = 'block';
+    document.getElementById('btn-confirmar').disabled = false;
+    document.getElementById('btn-confirmar').textContent = 'Confirmar reserva';
+    if (resetFechas) {
+        document.getElementById('m-checkin').value = '';
+        document.getElementById('m-checkout').value = '';
+        document.getElementById('m-noches').value = '—';
+        document.getElementById('price-preview').style.display = 'none';
+    }
+}
+
+function confirmarReserva() {
+    const ci = document.getElementById('m-checkin').value;
+    const co = document.getElementById('m-checkout').value;
+    const pais = document.getElementById('m-pais').value;
+    const adults = parseInt(document.getElementById('m-adultos').value) || 2;
+    const ninos = parseInt(document.getElementById('m-ninos').value) || 0;
+
+    if (!ci || !co) { alert('Por favor selecciona las fechas de entrada y salida.'); return; }
+
+    const btn = document.getElementById('btn-confirmar');
+    btn.disabled = true;
+    btn.textContent = '⏳ Procesando…';
+
+    const today = new Date().toISOString().slice(0,10);
+    const hInfo = HOTELES[hotelActivo] || {};
+
+    fetch('/api/predecir_publico', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+            hotel_id: hotelActivo,
+            llegada:  ci,
+            salida:   co,
+            fecha_toma: today,
+            adultos:  adults,
+            nenes:    ninos,
+            bebes:    0,
+            pais:     pais,
+            adr:      hInfo.precio || 200
+        })
+    })
+    .then(r => r.json())
+    .then(d => {
+        btn.style.display = 'none';
+        const noches = d.noches || 1;
+        const total = d.total_precio || (hInfo.precio * noches * adults);
+
+        // Mensaje según probabilidad (customer-friendly)
+        let icon, title, sub;
+        if (d.prob < 25) {
+            icon = '✅'; title = '¡Reserva confirmada!';
+            sub = 'Todo listo. Tu reserva en ' + d.hotel_nom + ' está confirmada. Recibirás un email de confirmación en breve.';
+        } else if (d.prob < 55) {
+            icon = '🎉'; title = '¡Reserva recibida!';
+            sub = 'Tu reserva en ' + d.hotel_nom + ' está pendiente de confirmación definitiva. Te contactaremos en menos de 24h.';
+        } else {
+            icon = '📋'; title = 'Solicitud registrada';
+            sub = 'Hemos recibido tu solicitud para ' + d.hotel_nom + '. Un agente la revisará y te confirmaremos disponibilidad.';
+        }
+
+        document.getElementById('result-icon').textContent = icon;
+        document.getElementById('result-title').textContent = title;
+        document.getElementById('result-subtitle').textContent = sub;
+
+        document.getElementById('result-grid').innerHTML = [
+            {l:'Hotel', v: d.hotel_nom || hInfo.nom},
+            {l:'Check-in', v: ci},
+            {l:'Check-out', v: co},
+            {l:'Noches', v: noches},
+            {l:'Temporada', v: d.temporada || '—'},
+            {l:'Total estimado', v: '$' + Math.round(total).toLocaleString('es-ES') + ' USD'},
+        ].map(x => `<div class="result-info-item"><div class="r-label">${x.l}</div><div class="r-val">${x.v}</div></div>`).join('');
+
+        document.getElementById('result-box').classList.add('show');
+    })
+    .catch(() => {
+        btn.disabled = false;
+        btn.textContent = 'Confirmar reserva';
+        alert('Error al procesar la reserva. Inténtalo de nuevo.');
+    });
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarModal(); });
+</script>
+</body>
+</html>

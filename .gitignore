@@ -1,0 +1,21 @@
+# Entorno virtual
+venv/
+ENV/
+env/
+
+# Temporales de Python
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Archivos del sistema Mac
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Archivos de datos grandes
+*.csv
+*.zip
+!entrenamiento/df_mediano.csv
+!entrenamiento/df_pequeno.csv

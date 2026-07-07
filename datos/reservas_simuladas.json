@@ -1,0 +1,380 @@
+[
+  {
+    "id": "20260705_223457_707061",
+    "usuario": "publico",
+    "tipo": "cliente",
+    "fecha_sim": "05/07/2026 22:34",
+    "hotel_id": 15,
+    "hotel_nom": "Ushuaïa Ibiza",
+    "segmento": "MEDIANO",
+    "llegada": "2026-08-04",
+    "salida": "2026-08-11",
+    "noches": 7,
+    "adultos": 2,
+    "nenes": 0,
+    "bebes": 0,
+    "pais": "",
+    "adr": 280.0,
+    "es_grupo": false,
+    "antelacion": 30,
+    "temporada": "BAJA",
+    "distancia": "No Info",
+    "pax_tipo": "PAREJAS",
+    "prob": 30.8,
+    "riesgo": "BAJO",
+    "explicacion": [
+      {
+        "factor": "Baja antelación",
+        "valor": "30 días",
+        "impacto": "bajo",
+        "direccion": "baja",
+        "descripcion": "Solo 30 días entre reserva y llegada. Las reservas de última hora rara vez se cancelan — el compromiso es alto."
+      },
+      {
+        "factor": "Canal Online / OTA",
+        "valor": "E-Commerce",
+        "impacto": "alto",
+        "direccion": "sube",
+        "descripcion": "Las reservas por OTA y canales online tienen la mayor tasa histórica de cancelación. La facilidad de cancelación online y las políticas flexibles aumentan el riesgo."
+      },
+      {
+        "factor": "Temporada baja",
+        "valor": "Jul-Sep",
+        "impacto": "medio",
+        "direccion": "sube",
+        "descripcion": "La temporada baja se asocia con mayor flexibilidad en las políticas de cancelación y clientes menos comprometidos con las fechas."
+      }
+    ]
+  },
+  {
+    "id": "20260706_131233_055755",
+    "usuario": "publico",
+    "tipo": "cliente",
+    "fecha_sim": "06/07/2026 13:12",
+    "hotel_id": 6,
+    "hotel_nom": "Palladium Vallarta",
+    "segmento": "MEDIANO",
+    "llegada": "2026-08-05",
+    "salida": "2026-08-12",
+    "noches": 7,
+    "adultos": 4,
+    "nenes": 2,
+    "bebes": 0,
+    "pais": "Francia",
+    "adr": 180.0,
+    "es_grupo": false,
+    "antelacion": 30,
+    "temporada": "BAJA",
+    "distancia": "Corto",
+    "pax_tipo": "FAMILIAS",
+    "prob": 2.5,
+    "riesgo": "BAJO",
+    "explicacion": [
+      {
+        "factor": "Baja antelación",
+        "valor": "30 días",
+        "impacto": "bajo",
+        "direccion": "baja",
+        "descripcion": "Solo 30 días entre reserva y llegada. Las reservas de última hora rara vez se cancelan — el compromiso es alto."
+      },
+      {
+        "factor": "Canal Online / OTA",
+        "valor": "E-Commerce",
+        "impacto": "alto",
+        "direccion": "sube",
+        "descripcion": "Las reservas por OTA y canales online tienen la mayor tasa histórica de cancelación. La facilidad de cancelación online y las políticas flexibles aumentan el riesgo."
+      },
+      {
+        "factor": "Viajero de origen cercano",
+        "valor": "Francia",
+        "impacto": "bajo",
+        "direccion": "baja",
+        "descripcion": "El mercado de proximidad (Francia) presenta menor incertidumbre logística y menor riesgo de cancelación por causas externas."
+      },
+      {
+        "factor": "Temporada baja",
+        "valor": "Jul-Sep",
+        "impacto": "medio",
+        "direccion": "sube",
+        "descripcion": "La temporada baja se asocia con mayor flexibilidad en las políticas de cancelación y clientes menos comprometidos con las fechas."
+      },
+      {
+        "factor": "Reserva familiar",
+        "valor": "3+ pax",
+        "impacto": "bajo",
+        "direccion": "baja",
+        "descripcion": "Las reservas familiares tienen menor probabilidad de cancelación: mayor compromiso, planificación anticipada y coste de cancelación más alto."
+      }
+    ]
+  },
+  {
+    "id": "20260706_191136_054088",
+    "usuario": "publico",
+    "tipo": "cliente",
+    "fecha_sim": "06/07/2026 19:11",
+    "hotel_id": 6,
+    "hotel_nom": "Palladium Vallarta",
+    "segmento": "MEDIANO",
+    "llegada": "2026-08-19",
+    "salida": "2026-08-23",
+    "noches": 4,
+    "adultos": 2,
+    "nenes": 0,
+    "bebes": 0,
+    "pais": "Alemania",
+    "adr": 180.0,
+    "es_grupo": false,
+    "antelacion": 44,
+    "temporada": "BAJA",
+    "distancia": "Medio",
+    "pax_tipo": "PAREJAS",
+    "prob": 3.0,
+    "riesgo": "BAJO",
+    "explicacion": [
+      {
+        "factor": "Antelación moderada",
+        "valor": "44 días",
+        "impacto": "bajo",
+        "direccion": "neutro",
+        "descripcion": "44 días de antelación es un rango estándar con riesgo moderado."
+      },
+      {
+        "factor": "Canal Online / OTA",
+        "valor": "E-Commerce",
+        "impacto": "alto",
+        "direccion": "sube",
+        "descripcion": "Las reservas por OTA y canales online tienen la mayor tasa histórica de cancelación. La facilidad de cancelación online y las políticas flexibles aumentan el riesgo."
+      },
+      {
+        "factor": "Temporada baja",
+        "valor": "Jul-Sep",
+        "impacto": "medio",
+        "direccion": "sube",
+        "descripcion": "La temporada baja se asocia con mayor flexibilidad en las políticas de cancelación y clientes menos comprometidos con las fechas."
+      }
+    ]
+  },
+  {
+    "id": "20260706_192451_225237",
+    "usuario": "publico",
+    "tipo": "cliente",
+    "fecha_sim": "06/07/2026 19:24",
+    "hotel_id": 9,
+    "hotel_nom": "Dominican Fiesta H&C",
+    "segmento": "MEDIANO",
+    "llegada": "2026-08-05",
+    "salida": "2026-08-12",
+    "noches": 7,
+    "adultos": 4,
+    "nenes": 0,
+    "bebes": 0,
+    "pais": "",
+    "adr": 130.0,
+    "es_grupo": false,
+    "antelacion": 30,
+    "temporada": "BAJA",
+    "distancia": "No Info",
+    "pax_tipo": "FAMILIAS",
+    "prob": 18.7,
+    "riesgo": "BAJO",
+    "explicacion": [
+      {
+        "factor": "Baja antelación",
+        "valor": "30 días",
+        "impacto": "bajo",
+        "direccion": "baja",
+        "descripcion": "Solo 30 días entre reserva y llegada. Las reservas de última hora rara vez se cancelan — el compromiso es alto."
+      },
+      {
+        "factor": "Canal Online / OTA",
+        "valor": "E-Commerce",
+        "impacto": "alto",
+        "direccion": "sube",
+        "descripcion": "Las reservas por OTA y canales online tienen la mayor tasa histórica de cancelación. La facilidad de cancelación online y las políticas flexibles aumentan el riesgo."
+      },
+      {
+        "factor": "Temporada baja",
+        "valor": "Jul-Sep",
+        "impacto": "medio",
+        "direccion": "sube",
+        "descripcion": "La temporada baja se asocia con mayor flexibilidad en las políticas de cancelación y clientes menos comprometidos con las fechas."
+      },
+      {
+        "factor": "Reserva familiar",
+        "valor": "3+ pax",
+        "impacto": "bajo",
+        "direccion": "baja",
+        "descripcion": "Las reservas familiares tienen menor probabilidad de cancelación: mayor compromiso, planificación anticipada y coste de cancelación más alto."
+      }
+    ]
+  },
+  {
+    "id": "20260706_192744_984698",
+    "usuario": "publico",
+    "tipo": "cliente",
+    "fecha_sim": "06/07/2026 19:27",
+    "hotel_id": 15,
+    "hotel_nom": "Ushuaïa Ibiza",
+    "segmento": "MEDIANO",
+    "llegada": "2026-08-05",
+    "salida": "2026-08-12",
+    "noches": 7,
+    "adultos": 5,
+    "nenes": 0,
+    "bebes": 0,
+    "pais": "Francia",
+    "adr": 280.0,
+    "es_grupo": false,
+    "antelacion": 30,
+    "temporada": "BAJA",
+    "distancia": "Corto",
+    "pax_tipo": "FAMILIAS",
+    "prob": 2.8,
+    "riesgo": "BAJO",
+    "explicacion": [
+      {
+        "factor": "Baja antelación",
+        "valor": "30 días",
+        "impacto": "bajo",
+        "direccion": "baja",
+        "descripcion": "Solo 30 días entre reserva y llegada. Las reservas de última hora rara vez se cancelan — el compromiso es alto."
+      },
+      {
+        "factor": "Canal Online / OTA",
+        "valor": "E-Commerce",
+        "impacto": "alto",
+        "direccion": "sube",
+        "descripcion": "Las reservas por OTA y canales online tienen la mayor tasa histórica de cancelación. La facilidad de cancelación online y las políticas flexibles aumentan el riesgo."
+      },
+      {
+        "factor": "Viajero de origen cercano",
+        "valor": "Francia",
+        "impacto": "bajo",
+        "direccion": "baja",
+        "descripcion": "El mercado de proximidad (Francia) presenta menor incertidumbre logística y menor riesgo de cancelación por causas externas."
+      },
+      {
+        "factor": "Temporada baja",
+        "valor": "Jul-Sep",
+        "impacto": "medio",
+        "direccion": "sube",
+        "descripcion": "La temporada baja se asocia con mayor flexibilidad en las políticas de cancelación y clientes menos comprometidos con las fechas."
+      },
+      {
+        "factor": "Reserva familiar",
+        "valor": "3+ pax",
+        "impacto": "bajo",
+        "direccion": "baja",
+        "descripcion": "Las reservas familiares tienen menor probabilidad de cancelación: mayor compromiso, planificación anticipada y coste de cancelación más alto."
+      }
+    ]
+  },
+  {
+    "id": "20260706_194117_240770",
+    "usuario": "publico",
+    "tipo": "cliente",
+    "fecha_sim": "06/07/2026 19:41",
+    "hotel_id": 6,
+    "hotel_nom": "Palladium Vallarta",
+    "segmento": "MEDIANO",
+    "llegada": "2026-08-05",
+    "salida": "2026-08-12",
+    "noches": 7,
+    "adultos": 2,
+    "nenes": 0,
+    "bebes": 0,
+    "pais": "España",
+    "adr": 180.0,
+    "es_grupo": false,
+    "antelacion": 30,
+    "temporada": "BAJA",
+    "distancia": "Corto",
+    "pax_tipo": "PAREJAS",
+    "prob": 7.5,
+    "riesgo": "BAJO",
+    "explicacion": [
+      {
+        "factor": "Baja antelación",
+        "valor": "30 días",
+        "impacto": "bajo",
+        "direccion": "baja",
+        "descripcion": "Solo 30 días entre reserva y llegada. Las reservas de última hora rara vez se cancelan — el compromiso es alto."
+      },
+      {
+        "factor": "Canal Online / OTA",
+        "valor": "E-Commerce",
+        "impacto": "alto",
+        "direccion": "sube",
+        "descripcion": "Las reservas por OTA y canales online tienen la mayor tasa histórica de cancelación. La facilidad de cancelación online y las políticas flexibles aumentan el riesgo."
+      },
+      {
+        "factor": "Viajero de origen cercano",
+        "valor": "España",
+        "impacto": "bajo",
+        "direccion": "baja",
+        "descripcion": "El mercado de proximidad (España) presenta menor incertidumbre logística y menor riesgo de cancelación por causas externas."
+      },
+      {
+        "factor": "Temporada baja",
+        "valor": "Jul-Sep",
+        "impacto": "medio",
+        "direccion": "sube",
+        "descripcion": "La temporada baja se asocia con mayor flexibilidad en las políticas de cancelación y clientes menos comprometidos con las fechas."
+      }
+    ]
+  },
+  {
+    "id": "20260706_194225_458436",
+    "usuario": "publico",
+    "tipo": "cliente",
+    "fecha_sim": "06/07/2026 19:42",
+    "hotel_id": 9,
+    "hotel_nom": "Dominican Fiesta H&C",
+    "segmento": "MEDIANO",
+    "llegada": "2026-08-05",
+    "salida": "2026-08-12",
+    "noches": 7,
+    "adultos": 2,
+    "nenes": 3,
+    "bebes": 0,
+    "pais": "Alemania",
+    "adr": 130.0,
+    "es_grupo": false,
+    "antelacion": 30,
+    "temporada": "BAJA",
+    "distancia": "Medio",
+    "pax_tipo": "FAMILIAS",
+    "prob": 6.5,
+    "riesgo": "BAJO",
+    "explicacion": [
+      {
+        "factor": "Baja antelación",
+        "valor": "30 días",
+        "impacto": "bajo",
+        "direccion": "baja",
+        "descripcion": "Solo 30 días entre reserva y llegada. Las reservas de última hora rara vez se cancelan — el compromiso es alto."
+      },
+      {
+        "factor": "Canal Online / OTA",
+        "valor": "E-Commerce",
+        "impacto": "alto",
+        "direccion": "sube",
+        "descripcion": "Las reservas por OTA y canales online tienen la mayor tasa histórica de cancelación. La facilidad de cancelación online y las políticas flexibles aumentan el riesgo."
+      },
+      {
+        "factor": "Temporada baja",
+        "valor": "Jul-Sep",
+        "impacto": "medio",
+        "direccion": "sube",
+        "descripcion": "La temporada baja se asocia con mayor flexibilidad en las políticas de cancelación y clientes menos comprometidos con las fechas."
+      },
+      {
+        "factor": "Reserva familiar",
+        "valor": "3+ pax",
+        "impacto": "bajo",
+        "direccion": "baja",
+        "descripcion": "Las reservas familiares tienen menor probabilidad de cancelación: mayor compromiso, planificación anticipada y coste de cancelación más alto."
+      }
+    ]
+  }
+]

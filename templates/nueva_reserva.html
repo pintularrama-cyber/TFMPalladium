@@ -1,0 +1,620 @@
+{% extends "base.html" %}
+{% block title %}Nueva Reserva — Palladium{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── LAYOUT ────────────────────────────────────── */
+.predictor-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    align-items: start;
+}
+@media (max-width: 900px) {
+    .predictor-grid { grid-template-columns: 1fr; }
+}
+
+/* ── FORM ──────────────────────────────────────── */
+.form-group {
+    margin-bottom: 18px;
+}
+.form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 6px;
+}
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid #dce1e7;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #2c3e50;
+    background: #fafbfc;
+    transition: border-color .2s;
+}
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: #3498db;
+    background: #fff;
+}
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+.form-row-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+}
+.toggle-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: #f0f4f8;
+    border-radius: 8px;
+    border: 1px solid #dce1e7;
+}
+.toggle-group label {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+}
+input[type="checkbox"].toggle {
+    width: 18px; height: 18px;
+    cursor: pointer;
+    accent-color: #3498db;
+}
+
+/* Info pill (auto-calculated fields) */
+.info-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #eaf4fb;
+    border: 1px solid #aed6f1;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 14px;
+    color: #1a5276;
+    font-weight: 600;
+}
+.info-pill .pill-icon { font-size: 16px; }
+.info-pill .pill-sub  { font-size: 11px; color: #5dade2; font-weight: 400; margin-left: auto; }
+
+/* Fixed tag */
+.fixed-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #e8f5e9;
+    border: 1px solid #a5d6a7;
+    color: #2e7d32;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    width: 100%;
+}
+
+.btn-predict {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, #3498db, #2980b9);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform .1s, box-shadow .2s;
+    margin-top: 8px;
+    letter-spacing: .5px;
+}
+.btn-predict:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(52,152,219,.4); }
+.btn-predict:active { transform: translateY(0); }
+.btn-predict:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+
+.hotel-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+.badge-pequeno  { background: #d5f5e3; color: #1e8449; }
+.badge-mediano  { background: #fef9e7; color: #b7950b; }
+.badge-grande   { background: #ebf5fb; color: #1a5276; }
+
+/* ── RESULTADO ─────────────────────────────────── */
+#resultado { display: none; }
+.resultado-header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+.hotel-result-name {
+    font-size: 20px;
+    font-weight: 700;
+    color: #2c3e50;
+}
+.hotel-result-seg {
+    font-size: 13px;
+    color: #7f8c8d;
+    margin-top: 4px;
+}
+
+/* ── GAUGE ─────────────────────────────────────── */
+.gauge-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 16px 0 24px;
+}
+.gauge-svg { width: 200px; height: 110px; }
+.gauge-arc-bg  { fill: none; stroke: #ecf0f1; stroke-width: 18; stroke-linecap: round; }
+.gauge-arc-val { fill: none; stroke-width: 18; stroke-linecap: round;
+                 transition: stroke-dasharray .8s cubic-bezier(.4,0,.2,1), stroke .4s; }
+.gauge-label { font-size: 32px; font-weight: 800; }
+.gauge-sub   { font-size: 12px; fill: #95a5a6; }
+
+.riesgo-badge {
+    padding: 6px 22px;
+    border-radius: 30px;
+    font-size: 15px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 4px;
+}
+.riesgo-ALTO   { background: #fde8e8; color: #c0392b; border: 2px solid #e74c3c; }
+.riesgo-MEDIO  { background: #fef5e7; color: #d35400; border: 2px solid #f39c12; }
+.riesgo-BAJO   { background: #e9f7ef; color: #1e8449; border: 2px solid #27ae60; }
+
+.verdict-box {
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    line-height: 1.5;
+    font-weight: 500;
+}
+.verdict-alto  { background: #fde8e8; border-left: 4px solid #e74c3c; color: #922b21; }
+.verdict-medio { background: #fef5e7; border-left: 4px solid #f39c12; color: #7d6608; }
+.verdict-bajo  { background: #e9f7ef; border-left: 4px solid #27ae60; color: #1e8449; }
+
+/* ── FACTORES ──────────────────────────────────── */
+.factores-titulo {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: #7f8c8d;
+    margin-bottom: 10px;
+}
+.factor-card {
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    border-left: 3px solid #bdc3c7;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+.factor-card.sube  { border-left-color: #e74c3c; }
+.factor-card.baja  { border-left-color: #27ae60; }
+.factor-card.neutro{ border-left-color: #f39c12; }
+.factor-icon { font-size: 16px; margin-top: 1px; flex-shrink: 0; }
+.factor-nombre { font-size: 13px; font-weight: 700; color: #2c3e50; }
+.factor-valor  { font-size: 12px; color: #7f8c8d; margin-bottom: 2px; }
+.factor-desc   { font-size: 12px; color: #5d6d7e; line-height: 1.4; }
+
+/* ── META INFO ─────────────────────────────────── */
+.meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+.meta-item {
+    background: #f0f4f8;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+}
+.meta-item .meta-label { color: #95a5a6; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+.meta-item .meta-val   { color: #2c3e50; font-weight: 700; font-size: 14px; }
+
+/* ── LOADING ───────────────────────────────────── */
+.spinner {
+    display: none;
+    text-align: center;
+    padding: 20px;
+    color: #7f8c8d;
+    font-size: 14px;
+}
+.spinner::before {
+    content: '';
+    display: inline-block;
+    width: 24px; height: 24px;
+    border: 3px solid #dce1e7;
+    border-top-color: #3498db;
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    vertical-align: middle;
+    margin-right: 10px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="content-header">
+    <h2>🔮 Simular nueva reserva</h2>
+    <p>Introduce los datos de una reserva y el modelo calculará la probabilidad de cancelación en tiempo real.</p>
+</div>
+
+<div class="predictor-grid">
+
+    <!-- ── FORMULARIO ───────────────────────────── -->
+    <div class="card">
+        <h3>Datos de la reserva</h3>
+        <form id="form-reserva" onsubmit="predecir(event)">
+
+            <div class="form-group">
+                <label>Hotel</label>
+                <select name="hotel_id" id="hotel_id" required onchange="actualizarHotel()">
+                    <option value="">— Selecciona hotel —</option>
+                    {% for h in hoteles %}
+                    <option value="{{ h.id }}"
+                            data-seg="{{ h.segmento }}"
+                            data-adr="{{ adr_medias.get(h.id, 0) }}">
+                        {{ h.nombre }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <div id="seg-badge" style="margin-top:6px; min-height:20px;"></div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Fecha de llegada</label>
+                    <input type="date" name="llegada" id="llegada" required
+                           onchange="calcularNoches()">
+                </div>
+                <div class="form-group">
+                    <label>Fecha de salida</label>
+                    <input type="date" name="salida" id="salida" required
+                           onchange="calcularNoches()">
+                </div>
+            </div>
+
+            <!-- Noches auto -->
+            <div class="form-group" id="noches-wrap" style="display:none;">
+                <label>Duración de la estancia</label>
+                <div class="info-pill">
+                    <span class="pill-icon">🌙</span>
+                    <span id="noches-texto">—</span>
+                    <span class="pill-sub">calculado automáticamente</span>
+                </div>
+            </div>
+
+            <!-- Fecha de reserva: hoy automático, oculto -->
+            <input type="hidden" name="fecha_toma" id="fecha_toma">
+
+            <div id="antelacion-info" style="margin:-10px 0 14px; font-size:12px; color:#7f8c8d; display:none;">
+                📅 Antelación: <strong id="ant-dias">—</strong> días
+            </div>
+
+            <!-- ADR automático -->
+            <div class="form-group">
+                <label>Tarifa media por noche</label>
+                <div class="info-pill" id="adr-pill" style="display:none;">
+                    <span class="pill-icon">💰</span>
+                    <span id="adr-texto">—</span>
+                    <span class="pill-sub">media histórica del hotel</span>
+                </div>
+                <div id="adr-empty" style="font-size:12px; color:#bdc3c7; padding:10px 14px; background:#fafbfc; border:1px solid #dce1e7; border-radius:8px;">
+                    Selecciona un hotel para ver la tarifa media
+                </div>
+            </div>
+            <!-- Campo oculto con el valor del ADR -->
+            <input type="hidden" id="adr" name="adr" value="0">
+
+            <div class="form-row-3">
+                <div class="form-group">
+                    <label>Adultos</label>
+                    <input type="number" name="adultos" id="adultos" min="1" max="10" value="2">
+                </div>
+                <div class="form-group">
+                    <label>Niños</label>
+                    <input type="number" name="nenes" id="nenes" min="0" max="10" value="0">
+                </div>
+                <div class="form-group">
+                    <label>Bebés</label>
+                    <input type="number" name="bebes" id="bebes" min="0" max="5" value="0">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>País de origen</label>
+                <select name="pais" id="pais">
+                    <option value="">— Selecciona país —</option>
+                    {% for p in paises %}
+                    <option value="{{ p }}">{{ p.title() }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Canal fijo: online -->
+            <div class="form-group">
+                <label>Canal de reserva</label>
+                <div class="fixed-tag">
+                    🌐 Online / E-Commerce
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>¿Es reserva de grupo?</label>
+                <div class="toggle-group">
+                    <input type="checkbox" class="toggle" name="es_grupo" id="es_grupo">
+                    <label for="es_grupo">Sí, es una reserva de grupo o múltiple</label>
+                </div>
+            </div>
+
+            <button type="submit" class="btn-predict" id="btn-predecir">
+                🔮 Calcular predicción
+            </button>
+        </form>
+    </div>
+
+    <!-- ── RESULTADO ────────────────────────────── -->
+    <div>
+        <div class="spinner" id="spinner">Calculando predicción...</div>
+
+        <div class="card" id="resultado">
+            <h3>Resultado del modelo</h3>
+
+            <div class="resultado-header">
+                <div class="hotel-result-name" id="res-hotel">—</div>
+                <div class="hotel-result-seg" id="res-seg">—</div>
+            </div>
+
+            <!-- Gauge -->
+            <div class="gauge-wrap">
+                <svg class="gauge-svg" viewBox="0 0 200 110">
+                    <path class="gauge-arc-bg"
+                          d="M 20 95 A 80 80 0 0 1 180 95"
+                          stroke-dasharray="251.3 251.3" stroke-dashoffset="0"/>
+                    <path class="gauge-arc-val" id="arc-val"
+                          d="M 20 95 A 80 80 0 0 1 180 95"
+                          stroke="#e74c3c"
+                          stroke-dasharray="0 251.3" stroke-dashoffset="0"/>
+                    <text x="100" y="82" text-anchor="middle" class="gauge-label" id="gauge-pct" fill="#2c3e50">—%</text>
+                    <text x="100" y="102" text-anchor="middle" class="gauge-sub">prob. cancelación</text>
+                </svg>
+                <div class="riesgo-badge" id="riesgo-badge">—</div>
+            </div>
+
+            <!-- Veredicto -->
+            <div class="verdict-box" id="verdict-box">—</div>
+
+            <!-- Meta info -->
+            <div class="meta-grid">
+                <div class="meta-item">
+                    <div class="meta-label">Antelación</div>
+                    <div class="meta-val" id="m-ant">—</div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-label">Noches</div>
+                    <div class="meta-val" id="m-noches">—</div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-label">Temporada</div>
+                    <div class="meta-val" id="m-temp">—</div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-label">Origen</div>
+                    <div class="meta-val" id="m-dist">—</div>
+                </div>
+            </div>
+
+            <!-- Factores -->
+            <div class="factores-titulo">Factores que influyen en la predicción</div>
+            <div id="factores-list"></div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ADR medias por hotel_id (desde Python)
+const ADR_MEDIAS = {{ adr_medias | tojson }};
+
+// Poner fecha de hoy por defecto en "fecha de reserva"
+(function() {
+    const hoy = new Date().toISOString().split('T')[0];
+    document.getElementById('fecha_toma').value = hoy;
+    // Mañana como mínimo para llegada
+    const manana = new Date(); manana.setDate(manana.getDate() + 1);
+    document.getElementById('llegada').min = manana.toISOString().split('T')[0];
+})();
+
+function actualizarHotel() {
+    const sel = document.getElementById('hotel_id');
+    const opt = sel.options[sel.selectedIndex];
+    const seg = opt.dataset.seg || '';
+    const hid = parseInt(opt.value) || 0;
+
+    // Badge segmento
+    const div = document.getElementById('seg-badge');
+    if (!seg) { div.innerHTML = ''; }
+    else {
+        const cls = 'badge-' + seg.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+        div.innerHTML = `<span class="hotel-badge ${cls}">${seg}</span>`;
+    }
+
+    // ADR medio
+    const adr = ADR_MEDIAS[hid] || 0;
+    document.getElementById('adr').value = adr;
+    if (adr > 0) {
+        document.getElementById('adr-pill').style.display = 'flex';
+        document.getElementById('adr-empty').style.display = 'none';
+        document.getElementById('adr-texto').textContent = '$' + adr.toFixed(0) + ' USD / noche';
+    } else {
+        document.getElementById('adr-pill').style.display = 'none';
+        document.getElementById('adr-empty').style.display = 'block';
+    }
+
+    calcularAntelacion();
+}
+
+function calcularNoches() {
+    const ll = document.getElementById('llegada').value;
+    const sa = document.getElementById('salida').value;
+    const wrap = document.getElementById('noches-wrap');
+    const sp   = document.getElementById('noches-texto');
+
+    // Que salida sea >= llegada
+    if (ll) document.getElementById('salida').min = ll;
+
+    if (!ll || !sa) { wrap.style.display = 'none'; return; }
+    const dias = Math.max(0, Math.round((new Date(sa) - new Date(ll)) / 86400000));
+    if (dias <= 0) { wrap.style.display = 'none'; return; }
+    sp.textContent = dias + (dias === 1 ? ' noche' : ' noches');
+    wrap.style.display = 'block';
+    calcularAntelacion();
+}
+
+function calcularAntelacion() {
+    const ll = document.getElementById('llegada').value;
+    const ft = document.getElementById('fecha_toma').value;
+    const div = document.getElementById('antelacion-info');
+    const sp  = document.getElementById('ant-dias');
+    if (!ll || !ft) { div.style.display = 'none'; return; }
+    const dias = Math.max(0, Math.round((new Date(ll) - new Date(ft)) / 86400000));
+    sp.textContent = dias;
+    div.style.display = 'block';
+}
+
+function predecir(e) {
+    e.preventDefault();
+    const btn     = document.getElementById('btn-predecir');
+    const spinner = document.getElementById('spinner');
+    const res     = document.getElementById('resultado');
+
+    // Validar noches
+    const ll = document.getElementById('llegada').value;
+    const sa = document.getElementById('salida').value;
+    if (ll && sa && new Date(sa) <= new Date(ll)) {
+        alert('La fecha de salida debe ser posterior a la de llegada.');
+        return;
+    }
+
+    btn.disabled = true;
+    spinner.style.display = 'block';
+    res.style.display = 'none';
+
+    const payload = {
+        hotel_id:   parseInt(document.getElementById('hotel_id').value) || 0,
+        llegada:    ll,
+        salida:     sa,
+        fecha_toma: document.getElementById('fecha_toma').value,
+        noches:     Math.max(1, Math.round((new Date(sa) - new Date(ll)) / 86400000)),
+        adr:        parseFloat(document.getElementById('adr').value) || 0,
+        adultos:    parseInt(document.getElementById('adultos').value) || 2,
+        nenes:      parseInt(document.getElementById('nenes').value) || 0,
+        bebes:      parseInt(document.getElementById('bebes').value) || 0,
+        pais:       document.getElementById('pais').value,
+        fuente:     'E-COMMERCE',
+        es_grupo:   document.getElementById('es_grupo').checked,
+    };
+
+    fetch('/api/predecir', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) { alert('Error: ' + data.error); return; }
+        mostrarResultado(data, payload);
+    })
+    .catch(err => alert('Error de conexión: ' + err))
+    .finally(() => {
+        btn.disabled = false;
+        spinner.style.display = 'none';
+    });
+}
+
+function mostrarResultado(d, payload) {
+    // Hotel / segmento
+    document.getElementById('res-hotel').textContent = d.hotel_nom;
+    const segCls = 'badge-' + (d.segmento||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+    document.getElementById('res-seg').innerHTML =
+        `Segmento: <span class="hotel-badge ${segCls}">${d.segmento}</span> · Modelo ${d.segmento === 'PEQUEÑO' ? 'Random Forest' : 'XGBoost'}`;
+
+    // Gauge
+    const perc = d.prob;
+    const ARC  = 251.3;
+    const fill = (perc / 100) * ARC;
+    const arc  = document.getElementById('arc-val');
+    arc.setAttribute('stroke-dasharray', fill + ' ' + ARC);
+    const color = perc > 65 ? '#e74c3c' : (perc > 35 ? '#f39c12' : '#27ae60');
+    arc.setAttribute('stroke', color);
+    document.getElementById('gauge-pct').textContent = perc.toFixed(1) + '%';
+    document.getElementById('gauge-pct').setAttribute('fill', color);
+
+    // Badge riesgo
+    const rb = document.getElementById('riesgo-badge');
+    rb.textContent = 'Riesgo ' + d.riesgo;
+    rb.className = 'riesgo-badge riesgo-' + d.riesgo;
+
+    // Veredicto
+    const vb = document.getElementById('verdict-box');
+    let msg = '';
+    if (perc > 65)
+        msg = `⚠️ El modelo predice <strong>alta probabilidad de cancelación (${perc}%)</strong>. Se recomienda contactar al cliente, ofrecer upgrades o políticas de cancelación más estrictas.`;
+    else if (perc > 35)
+        msg = `🔶 Probabilidad de cancelación <strong>moderada (${perc}%)</strong>. Mantener seguimiento y valorar incentivos de confirmación.`;
+    else
+        msg = `✅ <strong>Baja probabilidad de cancelación (${perc}%)</strong>. El modelo considera esta reserva como sólida.`;
+    vb.innerHTML = msg;
+    vb.className = 'verdict-box verdict-' + d.riesgo.toLowerCase();
+
+    // Meta
+    const noches = payload.noches || 1;
+    document.getElementById('m-ant').textContent    = d.antelacion + ' días';
+    document.getElementById('m-noches').textContent = noches + (noches === 1 ? ' noche' : ' noches');
+    document.getElementById('m-temp').textContent   = d.temporada;
+    document.getElementById('m-dist').textContent   = d.distancia;
+
+    // Factores
+    const icons = { sube: '↑', baja: '↓', neutro: '→' };
+    const fl = document.getElementById('factores-list');
+    fl.innerHTML = (d.explicacion || []).map(f => `
+        <div class="factor-card ${f.direccion}">
+            <div class="factor-icon">${icons[f.direccion] || '·'}</div>
+            <div class="factor-body">
+                <div class="factor-nombre">${f.factor}
+                    <span style="color:#7f8c8d;font-weight:400;font-size:11px">&nbsp;${f.valor}</span>
+                </div>
+                <div class="factor-desc">${f.descripcion}</div>
+            </div>
+        </div>`).join('');
+
+    document.getElementById('resultado').style.display = 'block';
+    document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+</script>
+{% endblock %}
