@@ -935,4 +935,4 @@ if __name__ == '__main__':
     print(f"Modelos cargados: {list(MODELOS.keys())}")
     print(f"{'='*60}\n")
 
-    app.run(host=FLASK_HOST, port=FLASK_PORT, debug=False)
+    app.run(host='0.0.0.0', port=FLASK_PORT, debug=False)
