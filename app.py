@@ -15,7 +15,7 @@ app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
 # ==========================================
-# CARGAR MODELOS AL INICIAR
+# CARGAR MODELOS BAJO DEMANDA (OPTIMIZADO)
 # ==========================================
 
 MODELOS = {}
@@ -38,10 +38,59 @@ def calcular_riesgo(prob, segmento):
     return 'BAJO'
 
 
+def obtener_modelo_y_explainer(segmento):
+    """
+    Carga el modelo y el explainer SHAP bajo demanda.
+    Para evitar el error de memoria en Render (RAM > 512MB), libera los modelos no utilizados de la memoria.
+    """
+    global SHAP_OK
+    
+    # 1. Si el modelo solicitado ya está en memoria, lo devolvemos rápido
+    if segmento in MODELOS:
+        return MODELOS[segmento], EXPLAINERS.get(segmento)
+        
+    # 2. Vaciamos los diccionarios para liberar espacio en la RAM antes de cargar el nuevo
+    MODELOS.clear()
+    EXPLAINERS.clear()
+    
+    # Forzamos la recolección de basura de Python para liberar la RAM de inmediato
+    import gc
+    gc.collect()
+    
+    # 3. Preparación de inyecciones del preprocesamiento para joblib
+    import sys
+    import preprocesamiento as _prep
+    _main = sys.modules.get('__main__')
+    if _main:
+        for _name in dir(_prep):
+            if not _name.startswith('_') and not hasattr(_main, _name):
+                setattr(_main, _name, getattr(_prep, _name))
+                
+    # 4. Carga del modelo solicitado
+    config = SEGMENTOS[segmento]
+    ruta_modelo = os.path.join(RUTA_MODELOS, config['modelo_archivo'])
+    print(f"--- Cargando bajo demanda modelo: {segmento} ---")
+    
+    modelo = joblib.load(ruta_modelo)
+    _limpiar_feature_names(modelo)
+    MODELOS[segmento] = modelo
+    
+    # 5. Carga del Explainer SHAP bajo demanda
+    try:
+        import shap
+        clf = modelo.named_steps['modelo']
+        EXPLAINERS[segmento] = shap.TreeExplainer(clf)
+        SHAP_OK = True
+        print(f"OK: SHAP TreeExplainer creado para {segmento}")
+    except Exception as e:
+        print(f"AVISO: SHAP no disponible para {segmento} ({type(e).__name__}): {e}")
+        SHAP_OK = False
+        
+    return MODELOS[segmento], EXPLAINERS.get(segmento)
+
+
 # ==========================================
-# TARGET ENCODING REAL (de mapeos_encoding.json, generado en el notebook FEATURE ENGINEERING)
-# Sustituye la aproximación por media global: cada país/habitación/segmento usa su
-# tasa de cancelación real, idéntica a la que aprendió el modelo.
+# TARGET ENCODING REAL
 # ==========================================
 MAPEOS_ENCODING = {}
 try:
@@ -58,7 +107,6 @@ except Exception as e:
 
 _MEDIA_GLOBAL_ENC = MAPEOS_ENCODING.get('_media_global', 0.38)
 
-# El país en la app usa un formato ('España', 'USA'); el encoder usa otro ('ESPAÑA', 'ESTADOS UNIDOS').
 _PAIS_APP_A_ENCODER = {
     'España': 'ESPAÑA', 'Alemania': 'ALEMANIA', 'Argentina': 'ARGENTINA', 'Brasil': 'BRASIL',
     'Canada': 'CANADA', 'Mexico': 'MEXICO', 'USA': 'ESTADOS UNIDOS', 'Reino_Unido': 'REINO UNIDO',
@@ -66,7 +114,6 @@ _PAIS_APP_A_ENCODER = {
 }
 
 def _cod_pais(pais_agrupado):
-    """Valor real de Target Encoding para el país agrupado (fallback: 'OTRO' o media global)."""
     m = MAPEOS_ENCODING.get('PAIS_AGRUPADO', {})
     if not m:
         return _MEDIA_GLOBAL_ENC
@@ -74,14 +121,12 @@ def _cod_pais(pais_agrupado):
     return m.get(clave, m.get('OTRO', _MEDIA_GLOBAL_ENC))
 
 def _cod_segmento(seg):
-    """Valor real de Target Encoding para el segmento de mercado (fallback: media global)."""
     m = MAPEOS_ENCODING.get('SEGMENTO', {})
     if not m:
         return _MEDIA_GLOBAL_ENC
     return m.get(str(seg).strip().upper(), _MEDIA_GLOBAL_ENC)
 
 def _cod_habitacion(hab):
-    """Valor real de Target Encoding para el tipo de habitación (fallback: 'OTROS' o media global)."""
     m = MAPEOS_ENCODING.get('HABITACION_LIMPIA', {})
     if not m:
         return _MEDIA_GLOBAL_ENC
@@ -105,19 +150,15 @@ def _guardar_reservas_simuladas():
             json.dump(RESERVAS_SIMULADAS, f, ensure_ascii=False, indent=2)
 
 def _limpiar_feature_names(estimador):
-    """Elimina feature_names_in_ de todos los pasos para evitar validación estricta de sklearn 1.9+."""
-    import numpy as np
     for attr in ('feature_names_in_',):
         if hasattr(estimador, attr):
             try:
                 delattr(estimador, attr)
             except Exception:
                 pass
-    # Recorrer pasos de un Pipeline
     if hasattr(estimador, 'steps'):
         for _, step in estimador.steps:
             _limpiar_feature_names(step)
-    # Recorrer transformers de un ColumnTransformer
     if hasattr(estimador, 'transformers_'):
         for _, t, _ in estimador.transformers_:
             _limpiar_feature_names(t)
@@ -127,47 +168,8 @@ def _limpiar_feature_names(estimador):
 
 
 def cargar_modelos():
-    """Carga los pipelines joblib desde el directorio del proyecto"""
-    import sys
-    import preprocesamiento as _prep
-    # Los modelos fueron guardados desde un notebook donde las clases estaban en __main__.
-    # Inyectarlas en __main__ permite que joblib/pickle las encuentre al deserializar.
-    _main = sys.modules.get('__main__')
-    if _main:
-        for _name in dir(_prep):
-            if not _name.startswith('_') and not hasattr(_main, _name):
-                setattr(_main, _name, getattr(_prep, _name))
-    try:
-        for segmento, config in SEGMENTOS.items():
-            ruta_modelo = os.path.join(RUTA_MODELOS, config['modelo_archivo'])
-            modelo = joblib.load(ruta_modelo)
-            _limpiar_feature_names(modelo)
-            MODELOS[segmento] = modelo
-        print("OK: Modelos cargados correctamente")
-    except Exception as e:
-        print(f"ERROR al cargar modelos: {e}")
-    _crear_explainers_shap()
-
-
-def _crear_explainers_shap():
-    """Crea un TreeExplainer de SHAP por segmento. Si SHAP no está disponible
-    o falla (entorno frágil), se omite y la app cae a las reglas de negocio."""
-    global SHAP_OK
-    try:
-        import shap
-    except Exception as e:
-        print(f"AVISO: SHAP no disponible ({type(e).__name__}) — se usarán reglas de negocio")
-        return
-    for segmento, modelo in MODELOS.items():
-        try:
-            clf = modelo.named_steps['modelo']
-            EXPLAINERS[segmento] = shap.TreeExplainer(clf)
-            SHAP_OK = True
-            print(f"OK: SHAP TreeExplainer creado ({segmento})")
-        except Exception as e:
-            print(f"AVISO: no se pudo crear SHAP para {segmento} — {type(e).__name__}: {e}")
-    if not SHAP_OK:
-        print("AVISO: ningún explainer SHAP disponible — se usarán reglas de negocio")
+    """Inicializa la app sin cargar los modelos pesados en RAM al arrancar."""
+    print("OK: Sistema de carga de modelos bajo demanda inicializado")
 
 
 # Nombres legibles y formateadores para las 20 columnas del pipeline
@@ -195,7 +197,6 @@ _NOMBRE_FEATURE = {
 }
 
 def _valor_legible(col, features):
-    """Devuelve el valor de la feature formateado para mostrar en el panel."""
     v = features.get(col, 0)
     if col == 'ANTELACION_DIAS': return f'{int(v)} días'
     if col == 'ADR':             return f'${v:.0f}/noche'
@@ -203,26 +204,21 @@ def _valor_legible(col, features):
     if col in ('NENES', 'BEBES'):return f'{int(v)}'
     if col in ('SEGMENTO_COD', 'PAIS_AGRUPADO_COD', 'HABITACION_LIMPIA_COD'):
         return f'{v:.3f}'
-    # Variables binarias (one-hot / grupo)
     return 'Sí' if float(v) >= 0.5 else 'No'
 
 
 def _generar_explicacion_shap(features, segmento):
-    """Explicación basada en los valores SHAP reales del modelo entrenado.
-    Devuelve la misma estructura que las reglas + 'metodo':'shap'.
-    Lanza excepción si algo falla (el wrapper la captura)."""
     import numpy as np
     explainer = EXPLAINERS[segmento]
     X20 = np.array([[float(features.get(c, 0.0)) for c in COLUMNAS_PIPELINE]], dtype=np.float64)
 
     sv = explainer.shap_values(X20)
-    # Normalizar el shape a un vector de 20 valores (clase positiva = cancelación)
     arr = np.array(sv)
-    if arr.ndim == 3:            # (n_muestras, n_features, n_clases) → clase 1
+    if arr.ndim == 3:
         vals = arr[0, :, 1] if arr.shape[2] > 1 else arr[0, :, 0]
-    elif arr.ndim == 2 and arr.shape[0] == 1:   # (1, n_features)
+    elif arr.ndim == 2 and arr.shape[0] == 1:
         vals = arr[0]
-    elif isinstance(sv, list):   # lista [clase0, clase1]
+    elif isinstance(sv, list):
         vals = np.array(sv[1])[0] if len(sv) > 1 else np.array(sv[0])[0]
     else:
         vals = arr.ravel()[:len(COLUMNAS_PIPELINE)]
@@ -230,16 +226,14 @@ def _generar_explicacion_shap(features, segmento):
     vals = np.asarray(vals, dtype=np.float64).ravel()[:len(COLUMNAS_PIPELINE)]
     max_abs = float(np.max(np.abs(vals))) or 1.0
 
-    # Ordenar por importancia absoluta y quedarnos con las más relevantes
     orden = sorted(range(len(vals)), key=lambda i: abs(vals[i]), reverse=True)
     factores = []
     for i in orden:
         col = COLUMNAS_PIPELINE[i]
         v = float(vals[i])
-        peso = abs(v) / max_abs   # 0..1 relativo dentro de esta predicción
+        peso = abs(v) / max_abs
         if peso < 0.05:
-            continue              # descartar aportaciones insignificantes
-        # Para las binarias que están a 0, su presencia no aplica → omitir si peso bajo
+            continue
         if col in _NOMBRE_FEATURE and col not in ('ANTELACION_DIAS','ADR','NOCHES','NENES','BEBES',
                 'SEGMENTO_COD','PAIS_AGRUPADO_COD','HABITACION_LIMPIA_COD'):
             if float(features.get(col, 0)) < 0.5 and peso < 0.15:
@@ -267,8 +261,6 @@ def _generar_explicacion_shap(features, segmento):
 
 
 def generar_explicacion(features, meta, segmento):
-    """Punto de entrada único. Intenta SHAP (explicación real del modelo);
-    si falla o no está disponible, cae a las reglas de negocio."""
     if SHAP_OK and segmento in EXPLAINERS:
         try:
             return _generar_explicacion_shap(features, segmento)
@@ -279,8 +271,8 @@ def generar_explicacion(features, meta, segmento):
         f['metodo'] = 'reglas'
     return factores
 
+
 def cargar_datos():
-    """Carga los CSVs para estadísticas (opcional - no bloquea la predicción)"""
     archivos = {
         'PEQUEÑO': 'df_pequeno.csv',
         'MEDIANO': 'df_mediano.csv',
@@ -296,8 +288,8 @@ def cargar_datos():
         else:
             print(f"AVISO: CSV no encontrado: {archivo}")
 
+
 def _parse_date(s):
-    """Parsea fecha sin usar pd.to_datetime (evita crash en API C de numpy)."""
     if not s:
         return None
     s = str(s).strip()
@@ -318,8 +310,6 @@ def _parse_date(s):
 
 
 def _transformar_fila(row):
-    """Convierte una fila de Reservas_22_23 a las 20 features del pipeline."""
-    # ADR en USD
     moneda = str(row.get('MONEDA', '') or '').strip().upper()
     tc = TIPO_CAMBIO_USD.get(moneda, 1.0)
     valor_usd = (
@@ -331,7 +321,6 @@ def _transformar_fila(row):
     noches = max(int(row.get('NOCHES', 1) or 1), 1)
     adr = round(valor_usd / noches, 2)
 
-    # Antelación — usando _parse_date (Python puro, sin numpy datetime API)
     llegada_dt = _parse_date(row.get('LLEGADA', ''))
     toma_dt    = _parse_date(row.get('FECHA_TOMA', ''))
     try:
@@ -339,37 +328,31 @@ def _transformar_fila(row):
     except Exception:
         antelacion = 0
 
-    # Temporada
     try:
         mes = llegada_dt.month if llegada_dt else 0
         temporada = TEMPORADA_MESES.get(mes, 'ALTA')
     except Exception:
         temporada = 'ALTA'
 
-    # País agrupado y distancia
     pais_raw    = str(row.get('PAIS', '') or '').strip().upper()
     pais_agrup  = MAPA_PAIS_AGRUPADO.get(pais_raw, 'Otros')
     distancia   = DISTANCIA_POR_PAIS.get(pais_agrup, 'No Info')
 
-    # PAX_TIPO
     pax = int(row.get('PAX', 2) or 2)
     pax_tipo = 'SINGLE' if pax == 1 else ('PAREJAS' if pax == 2 else 'FAMILIAS')
 
-    # Grupo
     try:
         grupo_cod = 1 if float(row.get('ID_MULTIPLE', 0) or 0) > 0 else 0
     except Exception:
         grupo_cod = 0
 
-    # Segmento del hotel (para elegir el modelo)
     hotel_id = int(row.get('ID_HOTEL', 0) or 0)
     segmento  = HOTEL_SIZE_MAPPING.get(hotel_id, 'GRANDE')
 
-    # Target encoding REAL: segmento de mercado y país (de las columnas del CSV)
     seg_mercado = str(row.get('SEGMENTO', '') or '').strip()
     cod_segmento = _cod_segmento(seg_mercado)
     cod_pais     = _cod_pais(pais_agrup)
-    cod_habitacion = _MEDIA_GLOBAL_ENC  # el CSV no trae la habitación limpia → media global
+    cod_habitacion = _MEDIA_GLOBAL_ENC
 
     fuente = str(row.get('FUENTE_NEGOCIO', '') or '').strip()
 
@@ -404,114 +387,92 @@ def _transformar_fila(row):
 
 
 def _generar_explicacion(features, meta):
-    """Genera lista de factores explicativos para la predicción (reglas de dominio)."""
     factores = []
 
-    # 1. Antelación — el predictor más importante en cancelaciones hoteleras
     ant = features.get('ANTELACION_DIAS', 0)
     if ant > 180:
         factores.append({'factor': 'Antelación muy alta', 'valor': f'{ant} días',
             'impacto': 'alto', 'direccion': 'sube',
-            'descripcion': 'Reservas con >180 días de antelación tienen el mayor riesgo de cancelación. '
-                           'A mayor tiempo entre reserva y llegada, más probable que cambien los planes.'})
+            'descripcion': 'Reservas con >180 días de antelación tienen el mayor riesgo de cancelación.'})
     elif ant > 90:
         factores.append({'factor': 'Antelación alta', 'valor': f'{ant} días',
             'impacto': 'medio', 'direccion': 'sube',
-            'descripcion': f'Con {ant} días de antelación, existe tiempo suficiente para que el cliente reconsidering. '
-                           'La antelación es el predictor con mayor peso en el modelo.'})
+            'descripcion': f'Con {ant} días de antelación, existe tiempo para reconsiderar.'})
     elif ant > 30:
         factores.append({'factor': 'Antelación moderada', 'valor': f'{ant} días',
             'impacto': 'bajo', 'direccion': 'neutro',
-            'descripcion': f'{ant} días de antelación es un rango estándar con riesgo moderado.'})
+            'descripcion': f'{ant} días de antelación es un rango estándar.'})
     else:
         factores.append({'factor': 'Baja antelación', 'valor': f'{ant} días',
             'impacto': 'bajo', 'direccion': 'baja',
-            'descripcion': f'Solo {ant} días entre reserva y llegada. Las reservas de última hora '
-                           'rara vez se cancelan — el compromiso es alto.'})
+            'descripcion': f'Solo {ant} días de antelación. Las reservas de última hora rara vez se cancelan.'})
 
-    # 2. Canal de distribución
     if features.get('FUENTE_NEGOCIO_E-COMMERCE', 0):
         factores.append({'factor': 'Canal Online / OTA', 'valor': 'E-Commerce',
             'impacto': 'alto', 'direccion': 'sube',
-            'descripcion': 'Las reservas por OTA y canales online tienen la mayor tasa histórica de cancelación. '
-                           'La facilidad de cancelación online y las políticas flexibles aumentan el riesgo.'})
+            'descripcion': 'Las reservas por OTA tienen la mayor tasa de cancelación.'})
     elif features.get('FUENTE_NEGOCIO_DIRECT SALES', 0):
         factores.append({'factor': 'Venta directa', 'valor': 'Direct Sales',
             'impacto': 'medio', 'direccion': 'baja',
-            'descripcion': 'Los clientes que reservan directamente muestran mayor fidelidad. '
-                           'La venta directa reduce el riesgo de cancelación respecto a OTAs.'})
+            'descripcion': 'Los clientes que reservan directamente muestran mayor fidelidad.'})
     elif features.get('FUENTE_NEGOCIO_T.O. / T.A.', 0):
         factores.append({'factor': 'Tour Operador / Agencia', 'valor': 'T.O. / T.A.',
             'impacto': 'bajo', 'direccion': 'baja',
-            'descripcion': 'Los paquetes de T.O. y agencias suelen tener penalizaciones estrictas, '
-                           'lo que desincentiva la cancelación.'})
+            'descripcion': 'Paquetes rígidos con penalizaciones desincentivan la cancelación.'})
     else:
         factores.append({'factor': 'Canal corporativo / otros', 'valor': 'Corporate/Others',
             'impacto': 'bajo', 'direccion': 'neutro',
-            'descripcion': 'Canal con comportamiento mixto según el tipo de cliente corporativo.'})
+            'descripcion': 'Comportamiento mixto según tipo de cliente.'})
 
-    # 3. ADR
     adr = features.get('ADR', 0)
     if adr > 600:
         factores.append({'factor': 'Tarifa muy elevada', 'valor': f'${adr:.0f}/noche',
             'impacto': 'medio', 'direccion': 'sube',
-            'descripcion': f'Con un ADR de ${adr:.0f}, la reserva tiene un coste elevado. '
-                           'Las reservas de alto valor son reconsi deradas con más frecuencia.'})
+            'descripcion': f'Con un ADR de ${adr:.0f}, la reserva tiene un coste muy elevado.'})
     elif adr > 300:
         factores.append({'factor': 'Tarifa alta', 'valor': f'${adr:.0f}/noche',
             'impacto': 'bajo', 'direccion': 'neutro',
-            'descripcion': f'ADR de ${adr:.0f} está en el rango medio-alto. Impacto moderado en la predicción.'})
+            'descripcion': f'ADR de ${adr:.0f} está en el rango medio-alto.'})
     elif adr < 80:
         factores.append({'factor': 'Tarifa muy baja', 'valor': f'${adr:.0f}/noche',
             'impacto': 'bajo', 'direccion': 'baja',
-            'descripcion': f'ADR de ${adr:.0f} sugiere posiblemente una tarifa no reembolsable u oferta especial, '
-                           'lo que reduce la probabilidad de cancelación.'})
+            'descripcion': f'ADR de ${adr:.0f} sugiere tarifas no reembolsables u ofertas.'})
 
-    # 4. Distancia / Origen geográfico
     dist = meta.get('distancia', 'No Info')
     pais = meta.get('pais_agrup', 'Otros')
     if dist == 'Largo':
         factores.append({'factor': 'Viajero de larga distancia', 'valor': pais,
             'impacto': 'medio', 'direccion': 'sube',
-            'descripcion': f'Los viajeros intercontinentales ({pais}) tienen mayor incertidumbre: '
-                           'visados, vuelos de conexión, costes elevados → mayor probabilidad de cancelación.'})
+            'descripcion': f'Viajeros intercontinentales ({pais}) tienen mayor incertidumbre logística.'})
     elif dist == 'Corto':
         factores.append({'factor': 'Viajero de origen cercano', 'valor': pais,
             'impacto': 'bajo', 'direccion': 'baja',
-            'descripcion': f'El mercado de proximidad ({pais}) presenta menor incertidumbre logística '
-                           'y menor riesgo de cancelación por causas externas.'})
+            'descripcion': f'El mercado de proximidad ({pais}) presenta menor incertidumbre.'})
 
-    # 5. Temporada
     temp = meta.get('temporada', 'ALTA')
     if temp == 'BAJA':
         factores.append({'factor': 'Temporada baja', 'valor': 'Jul-Sep',
             'impacto': 'medio', 'direccion': 'sube',
-            'descripcion': 'La temporada baja se asocia con mayor flexibilidad en las políticas de cancelación '
-                           'y clientes menos comprometidos con las fechas.'})
+            'descripcion': 'La temporada baja se asocia con mayor flexibilidad de políticas.'})
     elif temp == 'ALTA':
         factores.append({'factor': 'Temporada alta', 'valor': 'Dic-May',
             'impacto': 'bajo', 'direccion': 'baja',
-            'descripcion': 'En temporada alta la demanda es elevada y los clientes suelen mantener su reserva '
-                           'para no perder la plaza.'})
+            'descripcion': 'En temporada alta los clientes suelen mantener sus plazas.'})
 
-    # 6. Tipo de viajero
     pax = meta.get('pax_tipo', 'PAREJAS')
     if pax == 'SINGLE':
         factores.append({'factor': 'Viajero individual', 'valor': '1 pax',
             'impacto': 'medio', 'direccion': 'sube',
-            'descripcion': 'Los viajeros individuales tienen más flexibilidad y menos compromisos, '
-                           'lo que facilita la cancelación.'})
+            'descripcion': 'Los viajeros individuales tienen más flexibilidad para cambiar planes.'})
     elif pax == 'FAMILIAS':
         factores.append({'factor': 'Reserva familiar', 'valor': '3+ pax',
             'impacto': 'bajo', 'direccion': 'baja',
-            'descripcion': 'Las reservas familiares tienen menor probabilidad de cancelación: '
-                           'mayor compromiso, planificación anticipada y coste de cancelación más alto.'})
+            'descripcion': 'Planificación y costes más rígidos en viajes familiares.'})
 
     return factores
 
 
 def cargar_datos_originales():
-    """Carga muestra de Reservas_22_23.csv, transforma al pipeline y obtiene predicciones."""
     global DATOS_ORIG, DF_COMPLETO
     ruta = os.path.join(RUTA_DATOS, 'Reservas_22_23.csv')
     if not os.path.exists(ruta):
@@ -527,7 +488,7 @@ def cargar_datos_originales():
         print(f"OK: CSV original leído ({len(df)} filas)")
         df['ID_HOTEL'] = pd.to_numeric(df['ID_HOTEL'], errors='coerce').fillna(0).astype(int)
         df = df[df['ID_HOTEL'].isin(HOTEL_SIZE_MAPPING.keys())]
-        DF_COMPLETO = df  # guardamos el df completo para analytics
+        DF_COMPLETO = df
         muestra = df.sample(min(300, len(df)), random_state=42).reset_index(drop=True)
         print(f"OK: Muestra seleccionada ({len(muestra)} filas)")
 
@@ -540,15 +501,13 @@ def cargar_datos_originales():
             return clf.predict_proba(X20)
 
         predicciones_activas = False
-        for seg, modelo in MODELOS.items():
-            try:
-                _predecir(modelo, {c: 0.0 for c in COLUMNAS_PIPELINE})
-                predicciones_activas = True
-                print(f"OK: predict_proba activo — 20 features ({seg})")
-                break
-            except Exception as e_test:
-                print(f"AVISO: predict_proba no disponible — {type(e_test).__name__}: {e_test}")
-                break
+        try:
+            modelo_test, _ = obtener_modelo_y_explainer('MEDIANO')
+            _predecir(modelo_test, {c: 0.0 for c in COLUMNAS_PIPELINE})
+            predicciones_activas = True
+            print("OK: predict_proba verificado de manera dinámica")
+        except Exception as e_test:
+            print(f"AVISO: predict_proba no disponible — {e_test}")
 
         registros = []
         for _, row in muestra.iterrows():
@@ -562,10 +521,10 @@ def cargar_datos_originales():
             if predicciones_activas:
                 try:
                     seg_key = meta['segmento']
-                    if seg_key in MODELOS:
-                        prob_arr = _predecir(MODELOS[seg_key], features)
-                        prob = round(float(prob_arr[0][1]) * 100, 1)
-                        riesgo = calcular_riesgo(prob, seg_key)
+                    modelo_dyn, _ = obtener_modelo_y_explainer(seg_key)
+                    prob_arr = _predecir(modelo_dyn, features)
+                    prob = round(float(prob_arr[0][1]) * 100, 1)
+                    riesgo = calcular_riesgo(prob, seg_key)
                 except Exception:
                     pass
 
@@ -606,7 +565,6 @@ def cargar_datos_originales():
         DATOS_ORIG = registros
         preds_ok = sum(1 for r in registros if r['prob_pred'] is not None)
         print(f"OK: {len(DATOS_ORIG)} reservas cargadas ({preds_ok} con predicción)")
-        # Calcular fecha de corte = mediana de fechas de llegada
         global FECHA_CORTE
         fechas = sorted([r['llegada'] for r in registros if r.get('llegada') and len(r.get('llegada', '')) >= 7])
         FECHA_CORTE = fechas[len(fechas) // 2] if fechas else '2023-01-01'
@@ -616,17 +574,16 @@ def cargar_datos_originales():
         print(f"ERROR al cargar datos originales: {e}")
         traceback.print_exc()
 
+
 def cargar_dashboard():
-    """Predice el riesgo de TODAS las reservas de DF_COMPLETO y guarda una estructura
-    ligera para el dashboard: mes, llegada, hotel, cancelada (real), prob, riesgo, ingresos."""
     global DASHBOARD_RESERVAS
     if DF_COMPLETO is None or len(DF_COMPLETO) == 0:
         print("AVISO: sin DF_COMPLETO para el dashboard")
         return
     import numpy as np
     registros = []
-    feats_por_seg = {seg: [] for seg in MODELOS}
-    idx_por_seg = {seg: [] for seg in MODELOS}
+    feats_por_seg = {seg: [] for seg in SEGMENTOS.keys()}
+    idx_por_seg = {seg: [] for seg in SEGMENTOS.keys()}
     for _, row in DF_COMPLETO.iterrows():
         try:
             features, meta = _transformar_fila(row)
@@ -648,17 +605,17 @@ def cargar_dashboard():
         seg = meta['segmento']
         reg = {'mes': llegada[:7], 'llegada': llegada, 'hotel': hotel_nom,
                'cancelada': cancelada, 'ingresos': round(ingresos), 'prob': None, 'riesgo': None}
-        if seg in MODELOS:
+        if seg in feats_por_seg:
             feats_por_seg[seg].append([float(features.get(c, 0.0)) for c in COLUMNAS_PIPELINE])
             idx_por_seg[seg].append(len(registros))
         registros.append(reg)
 
-    # Predicción por lotes (rápido) para cada segmento
-    for seg, modelo in MODELOS.items():
+    for seg in feats_por_seg.keys():
         if not feats_por_seg[seg]:
             continue
         try:
-            clf   = modelo.named_steps['modelo']
+            modelo_dyn, _ = obtener_modelo_y_explainer(seg)
+            clf   = modelo_dyn.named_steps['modelo']
             X     = np.array(feats_por_seg[seg], dtype=np.float64)
             probs = clf.predict_proba(X)[:, 1]
             for j, idx in enumerate(idx_por_seg[seg]):
@@ -673,9 +630,6 @@ def cargar_dashboard():
 
 
 def agregar_dashboard(corte):
-    """Agrega las reservas por mes según la fecha de corte:
-    - Pasadas (llegada <= corte): resultado real (activas/canceladas, ingresos ganados/perdidos)
-    - Futuras (llegada > corte): predicción por riesgo (alto/medio/bajo, ingresos en riesgo)."""
     from collections import defaultdict
     def _blanco():
         return {'pas_activas': 0, 'pas_canceladas': 0, 'ing_ganados': 0.0, 'ing_perdidos': 0.0,
@@ -728,7 +682,6 @@ _cargar_reservas_simuladas()
 
 
 def _agregar_estadisticas():
-    """Agrega reservas e ingresos por mes y por hotel desde DF_COMPLETO."""
     from collections import defaultdict
     if DF_COMPLETO is None or len(DF_COMPLETO) == 0:
         return {'por_mes': [], 'por_hotel': []}
@@ -842,9 +795,6 @@ def login_required(f):
 # PÁGINA DE INICIO (LANDING)
 # ==========================================
 
-# Página de inicio (maqueta de reserva de cliente).
-# Datos REALES: nombre (catalogo_hoteles_final.csv), ubicación y país reales,
-# precio = ADR medio real (adr_medio_por_hotel.csv). Estrellas/tag/desc/grad: elementos visuales de la maqueta.
 HOTEL_INFO = {
     6:   {'nom': 'Palladium Vallarta',                      'loc': 'Puerto Vallarta, México',  'pais': '🇲🇽', 'estrellas': 5, 'precio': 216, 'tag': 'Todo incluido', 'grad': 'linear-gradient(160deg,#0d7377,#14a085)', 'desc': 'Resort frente al Pacífico mexicano.'},
     9:   {'nom': 'Dominican Fiesta Hotel & Casino',         'loc': 'Santo Domingo, Rep. Dom.', 'pais': '🇩🇴', 'estrellas': 4, 'precio': 100, 'tag': 'Hotel & Casino', 'grad': 'linear-gradient(160deg,#c0392b,#8e44ad)', 'desc': 'Hotel y casino en la capital dominicana.'},
@@ -894,7 +844,6 @@ def predecir_publico():
     distancia  = DISTANCIA_POR_PAIS.get(pais_agrup, 'No Info')
     pax        = adultos + nenes
     pax_tipo   = 'SINGLE' if pax == 1 else ('PAREJAS' if pax == 2 else 'FAMILIAS')
-    # País real; segmento de mercado y habitación no se piden en la web pública → media global
     cod_pais = _cod_pais(pais_agrup)
 
     features = {
@@ -920,17 +869,18 @@ def predecir_publico():
         'DISTANCIA_NO INFO': 1 if distancia == 'No Info' else 0,
     }
 
-    if segmento not in MODELOS:
+    try:
+        modelo_dyn, _ = obtener_modelo_y_explainer(segmento)
+    except Exception:
         return jsonify({'error': 'Modelo no disponible'}), 400
 
-    clf  = MODELOS[segmento].named_steps['modelo']
+    clf  = modelo_dyn.named_steps['modelo']
     X20  = np.array([[float(features.get(c, 0.0)) for c in COLUMNAS_PIPELINE]], dtype=np.float64)
     prob = round(float(clf.predict_proba(X20)[0][1]) * 100, 1)
     riesgo = calcular_riesgo(prob, segmento)
 
     total_precio = round(adr * noches * adultos, 2)
 
-    # Guardar en historial como reserva de canal cliente
     from datetime import datetime as _dt3
     meta_h = {'segmento': segmento, 'adr': adr, 'temporada': temporada,
               'distancia': distancia, 'pais_agrup': pais_agrup,
@@ -994,7 +944,6 @@ def estadisticas():
     hoteles_disponibles = sorted(set(r['hotel_nom'] for r in DATOS_ORIG if r.get('hotel_nom')))
     analytics = _agregar_estadisticas()
 
-    # Mostrar: propias del usuario + las del canal público (reservas de clientes)
     sims_usuario = [r for r in RESERVAS_SIMULADAS
                     if r.get('usuario') == usuario or r.get('tipo') == 'cliente']
     sims_usuario = sorted(sims_usuario, key=lambda x: x.get('id',''), reverse=True)
@@ -1081,7 +1030,6 @@ def nueva_reserva():
                for hid, nom in sorted(HOTEL_NOMBRES.items(), key=lambda x: x[1])]
     paises  = sorted(MAPA_PAIS_AGRUPADO.keys())
 
-    # ADR medio por hotel calculado desde los datos reales
     adr_por_hotel = {}
     for r in DATOS_ORIG:
         hid = r.get('hotel_id')
@@ -1092,7 +1040,6 @@ def nueva_reserva():
             adr_por_hotel[hid].append(adr)
     adr_medias = {hid: round(sum(v) / len(v), 2) for hid, v in adr_por_hotel.items()}
 
-    # Segmentos de mercado reales del encoder (no dependen del hotel, seguros de ofrecer)
     segmentos_mkt = sorted(MAPEOS_ENCODING.get('SEGMENTO', {}).keys())
 
     return render_template('nueva_reserva.html', usuario=usuario,
@@ -1117,7 +1064,6 @@ def api_predecir():
     except Exception:
         antelacion = 0
 
-    # Noches: calculadas desde fechas (salida - llegada)
     salida_dt = _parse_date(data.get('salida', ''))
     try:
         noches = max(1, (salida_dt - llegada_dt).days) if (salida_dt and llegada_dt) else max(int(data.get('noches', 1) or 1), 1)
@@ -1129,7 +1075,7 @@ def api_predecir():
     bebes     = int(data.get('bebes', 0) or 0)
     adultos   = int(data.get('adultos', 2) or 2)
     grupo_cod = 1 if data.get('es_grupo', False) else 0
-    fuente    = 'E-COMMERCE'  # siempre online desde este simulador
+    fuente    = 'E-COMMERCE'
     pais_raw  = str(data.get('pais', '') or '').strip().upper()
 
     mes        = llegada_dt.month if llegada_dt else 0
@@ -1138,8 +1084,6 @@ def api_predecir():
     distancia  = DISTANCIA_POR_PAIS.get(pais_agrup, 'No Info')
     pax        = adultos + nenes
     pax_tipo   = 'SINGLE' if pax == 1 else ('PAREJAS' if pax == 2 else 'FAMILIAS')
-    # Codificación REAL: país y segmento de mercado (elegidos en el formulario).
-    # La habitación depende de cada hotel → no se pide, se usa la media global (neutral).
     segmento_sel = str(data.get('segmento_mkt', '') or '').strip()
     cod_pais     = _cod_pais(pais_agrup)
     cod_seg_mkt  = _cod_segmento(segmento_sel) if segmento_sel else _MEDIA_GLOBAL_ENC
@@ -1172,16 +1116,17 @@ def api_predecir():
         'pax_tipo': pax_tipo, 'antelacion': antelacion,
     }
 
-    if segmento not in MODELOS:
+    try:
+        modelo_dyn, _ = obtener_modelo_y_explainer(segmento)
+    except Exception:
         return jsonify({'error': 'Modelo no disponible'}), 400
 
-    clf  = MODELOS[segmento].named_steps['modelo']
+    clf  = modelo_dyn.named_steps['modelo']
     X20  = np.array([[float(features.get(c, 0.0)) for c in COLUMNAS_PIPELINE]], dtype=np.float64)
     prob = round(float(clf.predict_proba(X20)[0][1]) * 100, 1)
     riesgo = calcular_riesgo(prob, segmento)
     explicacion = generar_explicacion(features, meta, segmento)
 
-    # Guardar en historial de simulaciones
     from datetime import datetime as _dt2
     sim_id = _dt2.now().strftime('%Y%m%d_%H%M%S_%f')
     registro_sim = {
@@ -1239,7 +1184,6 @@ def eliminar_reserva_simulada(sim_id):
 @app.route('/api/dashboard')
 @login_required
 def api_dashboard():
-    """Devuelve la agregación del dashboard para una fecha de corte dada."""
     corte = request.args.get('corte') or FECHA_CORTE
     return jsonify({'corte': corte, 'meses': agregar_dashboard(corte)})
 
@@ -1262,8 +1206,6 @@ def api_datos_segmento(segmento):
 # ==========================================
 
 if __name__ == '__main__':
-    # En Render (y otros hosts) el puerto lo asigna la plataforma vía la variable
-    # de entorno PORT. En local usa FLASK_PORT (5050).
     puerto = int(os.environ.get('PORT', FLASK_PORT))
     print(f"\n{'='*60}")
     print("APLICACIÓN PALLADIUM - PREDICTOR DE CANCELACIONES")
