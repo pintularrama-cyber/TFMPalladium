@@ -236,7 +236,6 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f4f6f9;
              data-tag="{{ h.tag|lower }}"
              onclick="abrirModal({{ hid }})">
 
-            <!-- Imagen real del hotel (si existe en static/img); si no, degradado -->
             <div class="card-img" style="background:{{ h.grad }};">
                 <img class="card-img-photo" src="{{ url_for('static', filename='img/hotel_' ~ hid ~ '.jpg') }}"
                      alt="{{ h.nom }}" onerror="this.remove()">
@@ -299,7 +298,8 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f4f6f9;
             </div>
         </div>
 
-        <div class="form-row">
+        <!-- OPTIMIZACIÓN: Desglose a 3 columnas para incluir BEBÉS de forma simétrica -->
+        <div class="form-row" style="grid-template-columns: 1fr 1fr 1fr;">
             <div class="f-group">
                 <label>Adultos</label>
                 <select id="m-adultos" onchange="calcModal()">
@@ -324,6 +324,17 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f4f6f9;
                     <option value="3">3 niños</option>
                     <option value="4">4 niños</option>
                     <option value="5">5 niños</option>
+                </select>
+            </div>
+            <div class="f-group">
+                <label>Bebés</label>
+                <select id="m-bebes">
+                    <option value="0" selected>Sin bebés</option>
+                    <option value="1">1 bebé</option>
+                    <option value="2">2 bebés</option>
+                    <option value="3">3 bebés</option>
+                    <option value="4">4 bebés</option>
+                    <option value="5">5 bebés</option>
                 </select>
             </div>
         </div>
@@ -394,7 +405,7 @@ let textoActivo = '';
     document.getElementById('s-checkout').min = fmt(hoy);
 })();
 
-// ── Normaliza texto: minúsculas + sin acentos ──
+// ── Normaliza texto ──
 function norm(s) {
     return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
@@ -451,7 +462,6 @@ function abrirModal(hid) {
     document.getElementById('modal-nom').textContent = h.nom;
     document.getElementById('modal-loc').textContent = h.pais + '  ' + h.loc;
     document.getElementById('modal-img').style.background = h.grad;
-    // Imagen real del hotel (si existe); si no, queda el degradado
     const mp = document.getElementById('modal-img-photo');
     mp.style.display = '';
     mp.onerror = () => { mp.style.display = 'none'; };
@@ -464,6 +474,7 @@ function abrirModal(hid) {
     document.getElementById('m-checkout').value = co;
     document.getElementById('m-adultos').value  = document.getElementById('s-adultos').value;
     document.getElementById('m-ninos').value    = document.getElementById('s-ninos').value;
+    document.getElementById('m-bebes').value    = "0"; // Reiniciar selector de bebés al abrir
 
     resetModal(false);
     calcModal();
@@ -502,6 +513,7 @@ function resetModal(resetFechas=true) {
         document.getElementById('m-checkin').value = '';
         document.getElementById('m-checkout').value = '';
         document.getElementById('m-noches').value = '—';
+        document.getElementById('m-bebes').value = '0';
         document.getElementById('price-preview').style.display = 'none';
     }
 }
@@ -512,6 +524,7 @@ function confirmarReserva() {
     const pais = document.getElementById('m-pais').value;
     const adults = parseInt(document.getElementById('m-adultos').value) || 2;
     const ninos = parseInt(document.getElementById('m-ninos').value) || 0;
+    const bebes = parseInt(document.getElementById('m-bebes').value) || 0; // Captura el valor de bebés
 
     if (!ci || !co) { alert('Por favor selecciona las fechas de entrada y salida.'); return; }
 
@@ -532,7 +545,7 @@ function confirmarReserva() {
             fecha_toma: today,
             adultos:  adults,
             nenes:    ninos,
-            bebes:    0,
+            bebes:    bebes, // Envía el conteo de bebés real al backend
             pais:     pais,
             adr:      hInfo.precio || 200
         })
@@ -543,7 +556,6 @@ function confirmarReserva() {
         const noches = d.noches || 1;
         const total = d.total_precio || (hInfo.precio * noches * adults);
 
-        // Mensaje según probabilidad (customer-friendly)
         let icon, title, sub;
         if (d.prob < 25) {
             icon = '✅'; title = '¡Reserva confirmada!';
