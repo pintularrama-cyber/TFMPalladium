@@ -19,12 +19,73 @@ app.secret_key = SECRET_KEY
 # ==========================================
 
 MODELOS = {}
+EXPLAINERS = {}   # SHAP TreeExplainer por segmento (se rellena si SHAP está disponible)
+SHAP_OK = False   # True si al menos un explainer SHAP se creó correctamente
 DATOS = {}
 DATOS_ORIG = []
 DF_COMPLETO = None  # 10 000 filas del CSV para analytics
+DASHBOARD_RESERVAS = []  # todas las reservas del dashboard con predicción de riesgo
 RESERVAS_SIMULADAS = []  # historial de simulaciones guardadas por usuario
+FECHA_CORTE = '2023-01-01'
 
 _RUTA_SIM = None  # se asigna tras conocer BASE_DIR (en cargar_datos_originales)
+
+
+def calcular_riesgo(prob, segmento):
+    u = UMBRALES_RIESGO.get(segmento, {'alto': 50, 'medio': 25})
+    if prob > u['alto']:  return 'ALTO'
+    if prob > u['medio']: return 'MEDIO'
+    return 'BAJO'
+
+
+# ==========================================
+# TARGET ENCODING REAL (de mapeos_encoding.json, generado en el notebook FEATURE ENGINEERING)
+# Sustituye la aproximación por media global: cada país/habitación/segmento usa su
+# tasa de cancelación real, idéntica a la que aprendió el modelo.
+# ==========================================
+MAPEOS_ENCODING = {}
+try:
+    import json as _json_map
+    _RUTA_MAPEOS = os.path.join(BASE_DIR, 'mapeos_encoding.json')
+    if os.path.exists(_RUTA_MAPEOS):
+        with open(_RUTA_MAPEOS, encoding='utf-8') as _fm:
+            MAPEOS_ENCODING = _json_map.load(_fm)
+        print(f"OK: mapeos de encoding cargados ({[k for k in MAPEOS_ENCODING if not k.startswith('_')]})")
+    else:
+        print("AVISO: mapeos_encoding.json no encontrado — se usará la media global")
+except Exception as e:
+    print(f"AVISO: no se pudo cargar mapeos_encoding.json ({e})")
+
+_MEDIA_GLOBAL_ENC = MAPEOS_ENCODING.get('_media_global', 0.38)
+
+# El país en la app usa un formato ('España', 'USA'); el encoder usa otro ('ESPAÑA', 'ESTADOS UNIDOS').
+_PAIS_APP_A_ENCODER = {
+    'España': 'ESPAÑA', 'Alemania': 'ALEMANIA', 'Argentina': 'ARGENTINA', 'Brasil': 'BRASIL',
+    'Canada': 'CANADA', 'Mexico': 'MEXICO', 'USA': 'ESTADOS UNIDOS', 'Reino_Unido': 'REINO UNIDO',
+    'Jamaica': 'JAMAICA',
+}
+
+def _cod_pais(pais_agrupado):
+    """Valor real de Target Encoding para el país agrupado (fallback: 'OTRO' o media global)."""
+    m = MAPEOS_ENCODING.get('PAIS_AGRUPADO', {})
+    if not m:
+        return _MEDIA_GLOBAL_ENC
+    clave = _PAIS_APP_A_ENCODER.get(pais_agrupado, str(pais_agrupado).strip().upper())
+    return m.get(clave, m.get('OTRO', _MEDIA_GLOBAL_ENC))
+
+def _cod_segmento(seg):
+    """Valor real de Target Encoding para el segmento de mercado (fallback: media global)."""
+    m = MAPEOS_ENCODING.get('SEGMENTO', {})
+    if not m:
+        return _MEDIA_GLOBAL_ENC
+    return m.get(str(seg).strip().upper(), _MEDIA_GLOBAL_ENC)
+
+def _cod_habitacion(hab):
+    """Valor real de Target Encoding para el tipo de habitación (fallback: 'OTROS' o media global)."""
+    m = MAPEOS_ENCODING.get('HABITACION_LIMPIA', {})
+    if not m:
+        return _MEDIA_GLOBAL_ENC
+    return m.get(str(hab).strip().upper(), m.get('OTROS', _MEDIA_GLOBAL_ENC))
 
 def _cargar_reservas_simuladas():
     global RESERVAS_SIMULADAS, _RUTA_SIM
@@ -85,6 +146,138 @@ def cargar_modelos():
         print("OK: Modelos cargados correctamente")
     except Exception as e:
         print(f"ERROR al cargar modelos: {e}")
+    _crear_explainers_shap()
+
+
+def _crear_explainers_shap():
+    """Crea un TreeExplainer de SHAP por segmento. Si SHAP no está disponible
+    o falla (entorno frágil), se omite y la app cae a las reglas de negocio."""
+    global SHAP_OK
+    try:
+        import shap
+    except Exception as e:
+        print(f"AVISO: SHAP no disponible ({type(e).__name__}) — se usarán reglas de negocio")
+        return
+    for segmento, modelo in MODELOS.items():
+        try:
+            clf = modelo.named_steps['modelo']
+            EXPLAINERS[segmento] = shap.TreeExplainer(clf)
+            SHAP_OK = True
+            print(f"OK: SHAP TreeExplainer creado ({segmento})")
+        except Exception as e:
+            print(f"AVISO: no se pudo crear SHAP para {segmento} — {type(e).__name__}: {e}")
+    if not SHAP_OK:
+        print("AVISO: ningún explainer SHAP disponible — se usarán reglas de negocio")
+
+
+# Nombres legibles y formateadores para las 20 columnas del pipeline
+_NOMBRE_FEATURE = {
+    'ANTELACION_DIAS': 'Antelación de la reserva',
+    'ADR': 'Tarifa media (ADR)',
+    'NOCHES': 'Número de noches',
+    'NENES': 'Niños en la reserva',
+    'BEBES': 'Bebés en la reserva',
+    'SEGMENTO_COD': 'Segmento del hotel',
+    'PAIS_AGRUPADO_COD': 'País de origen (codificado)',
+    'HABITACION_LIMPIA_COD': 'Tipo de habitación (codificado)',
+    'GRUPO_TIPO_COD': 'Reserva de grupo',
+    'FUENTE_NEGOCIO_DIRECT SALES': 'Canal: Venta directa',
+    'FUENTE_NEGOCIO_E-COMMERCE': 'Canal: E-Commerce / OTA',
+    'FUENTE_NEGOCIO_OTHERS': 'Canal: Otros',
+    'FUENTE_NEGOCIO_T.O. / T.A.': 'Canal: Tour Operador / Agencia',
+    'PAX_TIPO_PAREJAS': 'Tipo de viajero: Pareja',
+    'PAX_TIPO_SINGLE': 'Tipo de viajero: Individual',
+    'TEMPORADA_BAJA': 'Temporada baja',
+    'TEMPORADA_MEDIA': 'Temporada media',
+    'DISTANCIA_LARGO': 'Origen de larga distancia',
+    'DISTANCIA_MEDIO': 'Origen de media distancia',
+    'DISTANCIA_NO INFO': 'Origen sin información',
+}
+
+def _valor_legible(col, features):
+    """Devuelve el valor de la feature formateado para mostrar en el panel."""
+    v = features.get(col, 0)
+    if col == 'ANTELACION_DIAS': return f'{int(v)} días'
+    if col == 'ADR':             return f'${v:.0f}/noche'
+    if col == 'NOCHES':          return f'{int(v)} noches'
+    if col in ('NENES', 'BEBES'):return f'{int(v)}'
+    if col in ('SEGMENTO_COD', 'PAIS_AGRUPADO_COD', 'HABITACION_LIMPIA_COD'):
+        return f'{v:.3f}'
+    # Variables binarias (one-hot / grupo)
+    return 'Sí' if float(v) >= 0.5 else 'No'
+
+
+def _generar_explicacion_shap(features, segmento):
+    """Explicación basada en los valores SHAP reales del modelo entrenado.
+    Devuelve la misma estructura que las reglas + 'metodo':'shap'.
+    Lanza excepción si algo falla (el wrapper la captura)."""
+    import numpy as np
+    explainer = EXPLAINERS[segmento]
+    X20 = np.array([[float(features.get(c, 0.0)) for c in COLUMNAS_PIPELINE]], dtype=np.float64)
+
+    sv = explainer.shap_values(X20)
+    # Normalizar el shape a un vector de 20 valores (clase positiva = cancelación)
+    arr = np.array(sv)
+    if arr.ndim == 3:            # (n_muestras, n_features, n_clases) → clase 1
+        vals = arr[0, :, 1] if arr.shape[2] > 1 else arr[0, :, 0]
+    elif arr.ndim == 2 and arr.shape[0] == 1:   # (1, n_features)
+        vals = arr[0]
+    elif isinstance(sv, list):   # lista [clase0, clase1]
+        vals = np.array(sv[1])[0] if len(sv) > 1 else np.array(sv[0])[0]
+    else:
+        vals = arr.ravel()[:len(COLUMNAS_PIPELINE)]
+
+    vals = np.asarray(vals, dtype=np.float64).ravel()[:len(COLUMNAS_PIPELINE)]
+    max_abs = float(np.max(np.abs(vals))) or 1.0
+
+    # Ordenar por importancia absoluta y quedarnos con las más relevantes
+    orden = sorted(range(len(vals)), key=lambda i: abs(vals[i]), reverse=True)
+    factores = []
+    for i in orden:
+        col = COLUMNAS_PIPELINE[i]
+        v = float(vals[i])
+        peso = abs(v) / max_abs   # 0..1 relativo dentro de esta predicción
+        if peso < 0.05:
+            continue              # descartar aportaciones insignificantes
+        # Para las binarias que están a 0, su presencia no aplica → omitir si peso bajo
+        if col in _NOMBRE_FEATURE and col not in ('ANTELACION_DIAS','ADR','NOCHES','NENES','BEBES',
+                'SEGMENTO_COD','PAIS_AGRUPADO_COD','HABITACION_LIMPIA_COD'):
+            if float(features.get(col, 0)) < 0.5 and peso < 0.15:
+                continue
+        direccion = 'sube' if v > 0 else ('baja' if v < 0 else 'neutro')
+        impacto = 'alto' if peso >= 0.5 else ('medio' if peso >= 0.2 else 'bajo')
+        sentido = ('aumenta' if v > 0 else 'reduce')
+        factores.append({
+            'factor': _NOMBRE_FEATURE.get(col, col),
+            'valor': _valor_legible(col, features),
+            'impacto': impacto,
+            'direccion': direccion,
+            'shap': round(v, 4),
+            'peso_pct': round(peso * 100),
+            'descripcion': f'Esta variable {sentido} la probabilidad de cancelación de esta reserva. '
+                           f'Aporta un {round(peso*100)}% del peso total de la predicción del modelo '
+                           f'(valor SHAP = {v:+.4f}).',
+            'metodo': 'shap',
+        })
+        if len(factores) >= 6:
+            break
+    if not factores:
+        raise ValueError('SHAP no produjo factores relevantes')
+    return factores
+
+
+def generar_explicacion(features, meta, segmento):
+    """Punto de entrada único. Intenta SHAP (explicación real del modelo);
+    si falla o no está disponible, cae a las reglas de negocio."""
+    if SHAP_OK and segmento in EXPLAINERS:
+        try:
+            return _generar_explicacion_shap(features, segmento)
+        except Exception as e:
+            print(f"AVISO: SHAP falló en predicción ({type(e).__name__}: {e}) — usando reglas")
+    factores = _generar_explicacion(features, meta)
+    for f in factores:
+        f['metodo'] = 'reglas'
+    return factores
 
 def cargar_datos():
     """Carga los CSVs para estadísticas (opcional - no bloquea la predicción)"""
@@ -168,10 +361,15 @@ def _transformar_fila(row):
     except Exception:
         grupo_cod = 0
 
-    # Segmento del hotel
+    # Segmento del hotel (para elegir el modelo)
     hotel_id = int(row.get('ID_HOTEL', 0) or 0)
     segmento  = HOTEL_SIZE_MAPPING.get(hotel_id, 'GRANDE')
-    global_mean = GLOBAL_MEANS[segmento]
+
+    # Target encoding REAL: segmento de mercado y país (de las columnas del CSV)
+    seg_mercado = str(row.get('SEGMENTO', '') or '').strip()
+    cod_segmento = _cod_segmento(seg_mercado)
+    cod_pais     = _cod_pais(pais_agrup)
+    cod_habitacion = _MEDIA_GLOBAL_ENC  # el CSV no trae la habitación limpia → media global
 
     fuente = str(row.get('FUENTE_NEGOCIO', '') or '').strip()
 
@@ -181,9 +379,9 @@ def _transformar_fila(row):
         'NOCHES':          noches,
         'NENES':           int(row.get('NENES', 0) or 0),
         'BEBES':           int(row.get('BEBES', 0) or 0),
-        'SEGMENTO_COD':           global_mean,
-        'PAIS_AGRUPADO_COD':      global_mean,
-        'HABITACION_LIMPIA_COD':  global_mean,
+        'SEGMENTO_COD':           cod_segmento,
+        'PAIS_AGRUPADO_COD':      cod_pais,
+        'HABITACION_LIMPIA_COD':  cod_habitacion,
         'GRUPO_TIPO_COD':         grupo_cod,
         'FUENTE_NEGOCIO_DIRECT SALES':  1 if fuente == 'DIRECT SALES'  else 0,
         'FUENTE_NEGOCIO_E-COMMERCE':    1 if fuente == 'E-COMMERCE'    else 0,
@@ -322,7 +520,7 @@ def cargar_datos_originales():
     try:
         cols = ['ID_RESERVA', 'ID_HOTEL', 'LLEGADA', 'FECHA_TOMA', 'NOCHES',
                 'PAX', 'ADULTOS', 'NENES', 'BEBES', 'PAIS', 'FUENTE_NEGOCIO',
-                'TIPO', 'STATUS', 'ID_MULTIPLE', 'MONEDA',
+                'TIPO', 'STATUS', 'ID_MULTIPLE', 'MONEDA', 'SEGMENTO',
                 'VALHAB', 'VALPEN', 'VALSERV', 'VALFIJOS']
         df = pd.read_csv(ruta, sep=';', nrows=10000, usecols=cols,
                          on_bad_lines='skip', low_memory=False)
@@ -367,7 +565,7 @@ def cargar_datos_originales():
                     if seg_key in MODELOS:
                         prob_arr = _predecir(MODELOS[seg_key], features)
                         prob = round(float(prob_arr[0][1]) * 100, 1)
-                        riesgo = 'ALTO' if prob > 65 else ('MEDIO' if prob > 35 else 'BAJO')
+                        riesgo = calcular_riesgo(prob, seg_key)
                 except Exception:
                     pass
 
@@ -375,7 +573,7 @@ def cargar_datos_originales():
             cancelada  = bool(MAPA_STATUS.get(status_val, 0))
             hotel_id   = int(row.get('ID_HOTEL', 0))
             hotel_nom  = HOTEL_NOMBRES.get(hotel_id, f'Hotel {hotel_id}')
-            explicacion = _generar_explicacion(features, meta)
+            explicacion = generar_explicacion(features, meta, meta['segmento'])
 
             registros.append({
                 'id_reserva':  str(row.get('ID_RESERVA', '')),
@@ -401,20 +599,131 @@ def cargar_datos_originales():
                 'prob_pred':   prob,
                 'riesgo_pred': riesgo,
                 'explicacion': explicacion,
+                'metodo_exp':  (explicacion[0]['metodo'] if explicacion else 'reglas'),
                 '_features':   features,
             })
 
         DATOS_ORIG = registros
         preds_ok = sum(1 for r in registros if r['prob_pred'] is not None)
         print(f"OK: {len(DATOS_ORIG)} reservas cargadas ({preds_ok} con predicción)")
+        # Calcular fecha de corte = mediana de fechas de llegada
+        global FECHA_CORTE
+        fechas = sorted([r['llegada'] for r in registros if r.get('llegada') and len(r.get('llegada', '')) >= 7])
+        FECHA_CORTE = fechas[len(fechas) // 2] if fechas else '2023-01-01'
+        print(f"OK: Fecha de corte calculada: {FECHA_CORTE}")
     except Exception as e:
         import traceback
         print(f"ERROR al cargar datos originales: {e}")
         traceback.print_exc()
 
+def cargar_dashboard():
+    """Predice el riesgo de TODAS las reservas de DF_COMPLETO y guarda una estructura
+    ligera para el dashboard: mes, llegada, hotel, cancelada (real), prob, riesgo, ingresos."""
+    global DASHBOARD_RESERVAS
+    if DF_COMPLETO is None or len(DF_COMPLETO) == 0:
+        print("AVISO: sin DF_COMPLETO para el dashboard")
+        return
+    import numpy as np
+    registros = []
+    feats_por_seg = {seg: [] for seg in MODELOS}
+    idx_por_seg = {seg: [] for seg in MODELOS}
+    for _, row in DF_COMPLETO.iterrows():
+        try:
+            features, meta = _transformar_fila(row)
+        except Exception:
+            continue
+        llegada = str(row.get('LLEGADA', '') or '')[:10]
+        if len(llegada) < 7:
+            continue
+        hotel_id  = int(float(row.get('ID_HOTEL', 0) or 0))
+        hotel_nom = HOTEL_NOMBRES.get(hotel_id)
+        if not hotel_nom:
+            continue
+        status    = int(float(row.get('STATUS', 0) or 0))
+        cancelada = bool(MAPA_STATUS.get(status, 0))
+        moneda    = str(row.get('MONEDA', '') or '').strip().upper()
+        tc        = TIPO_CAMBIO_USD.get(moneda, 1.0)
+        ingresos  = (float(row.get('VALHAB', 0) or 0) + float(row.get('VALPEN', 0) or 0) +
+                     float(row.get('VALSERV', 0) or 0) + float(row.get('VALFIJOS', 0) or 0)) / tc
+        seg = meta['segmento']
+        reg = {'mes': llegada[:7], 'llegada': llegada, 'hotel': hotel_nom,
+               'cancelada': cancelada, 'ingresos': round(ingresos), 'prob': None, 'riesgo': None}
+        if seg in MODELOS:
+            feats_por_seg[seg].append([float(features.get(c, 0.0)) for c in COLUMNAS_PIPELINE])
+            idx_por_seg[seg].append(len(registros))
+        registros.append(reg)
+
+    # Predicción por lotes (rápido) para cada segmento
+    for seg, modelo in MODELOS.items():
+        if not feats_por_seg[seg]:
+            continue
+        try:
+            clf   = modelo.named_steps['modelo']
+            X     = np.array(feats_por_seg[seg], dtype=np.float64)
+            probs = clf.predict_proba(X)[:, 1]
+            for j, idx in enumerate(idx_por_seg[seg]):
+                p = round(float(probs[j]) * 100, 1)
+                registros[idx]['prob']   = p
+                registros[idx]['riesgo'] = calcular_riesgo(p, seg)
+        except Exception as e:
+            print(f"AVISO: no se pudo predecir el dashboard para {seg}: {e}")
+
+    DASHBOARD_RESERVAS = registros
+    print(f"OK: Dashboard — {len(DASHBOARD_RESERVAS)} reservas con predicción de riesgo")
+
+
+def agregar_dashboard(corte):
+    """Agrega las reservas por mes según la fecha de corte:
+    - Pasadas (llegada <= corte): resultado real (activas/canceladas, ingresos ganados/perdidos)
+    - Futuras (llegada > corte): predicción por riesgo (alto/medio/bajo, ingresos en riesgo)."""
+    from collections import defaultdict
+    def _blanco():
+        return {'pas_activas': 0, 'pas_canceladas': 0, 'ing_ganados': 0.0, 'ing_perdidos': 0.0,
+                'fut_alto': 0, 'fut_medio': 0, 'fut_bajo': 0,
+                'ing_alto': 0.0, 'ing_medio': 0.0, 'ing_bajo': 0.0}
+    meses = defaultdict(lambda: {'stats': _blanco(), 'hoteles': defaultdict(_blanco)})
+
+    for r in DASHBOARD_RESERVAS:
+        nodo = meses[r['mes']]
+        s = nodo['stats']; h = nodo['hoteles'][r['hotel']]
+        ing = r['ingresos']
+        if r['llegada'] <= corte:
+            if r['cancelada']:
+                s['pas_canceladas'] += 1; s['ing_perdidos'] += ing
+                h['pas_canceladas'] += 1; h['ing_perdidos'] += ing
+            else:
+                s['pas_activas'] += 1; s['ing_ganados'] += ing
+                h['pas_activas'] += 1; h['ing_ganados'] += ing
+        else:
+            rg = r['riesgo'] or 'BAJO'
+            k = 'alto' if rg == 'ALTO' else ('medio' if rg == 'MEDIO' else 'bajo')
+            s['fut_' + k] += 1; s['ing_' + k] += ing
+            h['fut_' + k] += 1; h['ing_' + k] += ing
+
+    salida = []
+    for mes in sorted(meses.keys()):
+        nodo = meses[mes]; s = nodo['stats']
+        hoteles = []
+        for hn, h in nodo['hoteles'].items():
+            item = {'hotel': hn}
+            item.update({k: (round(v) if 'ing_' in k else v) for k, v in h.items()})
+            item['total'] = (h['pas_activas'] + h['pas_canceladas'] +
+                             h['fut_alto'] + h['fut_medio'] + h['fut_bajo'])
+            hoteles.append(item)
+        hoteles.sort(key=lambda x: -x['total'])
+        fila = {'mes': mes}
+        fila.update({k: (round(v) if 'ing_' in k else v) for k, v in s.items()})
+        fila['total'] = (s['pas_activas'] + s['pas_canceladas'] +
+                         s['fut_alto'] + s['fut_medio'] + s['fut_bajo'])
+        fila['hoteles'] = hoteles
+        salida.append(fila)
+    return salida
+
+
 cargar_modelos()
 cargar_datos()
 cargar_datos_originales()
+cargar_dashboard()
 _cargar_reservas_simuladas()
 
 
@@ -533,19 +842,18 @@ def login_required(f):
 # PÁGINA DE INICIO (LANDING)
 # ==========================================
 
+# Página de inicio (maqueta de reserva de cliente).
+# Datos REALES: nombre (catalogo_hoteles_final.csv), ubicación y país reales,
+# precio = ADR medio real (adr_medio_por_hotel.csv). Estrellas/tag/desc/grad: elementos visuales de la maqueta.
 HOTEL_INFO = {
-    6:   {'nom': 'Palladium Vallarta',        'loc': 'Puerto Vallarta, México',     'pais': '🇲🇽', 'estrellas': 5, 'precio': 180, 'tag': 'Todo incluido', 'grad': 'linear-gradient(160deg,#0d7377,#14a085)', 'desc': 'Resort tropical frente al Pacífico con playas de arena blanca y selva exuberante.'},
-    9:   {'nom': 'Dominican Fiesta H&C',      'loc': 'Punta Cana, Rep. Dom.',       'pais': '🇩🇴', 'estrellas': 4, 'precio': 130, 'tag': 'Playa privada', 'grad': 'linear-gradient(160deg,#c0392b,#8e44ad)', 'desc': 'Hotel & Casino frente al mar Caribe con entretenimiento para toda la familia.'},
-    15:  {'nom': 'Ushuaïa Ibiza Beach Hotel', 'loc': 'Ibiza, España',               'pais': '🇪🇸', 'estrellas': 5, 'precio': 280, 'tag': 'Adults only', 'grad': 'linear-gradient(160deg,#6c3483,#d35400)', 'desc': 'Hotel de fiesta con los mejores DJs del mundo y vistas al Mar Mediterráneo.'},
-    30:  {'nom': 'Hard Rock Hotel Ibiza',     'loc': 'Ibiza, España',               'pais': '🇪🇸', 'estrellas': 5, 'precio': 250, 'tag': 'Rock & Beach', 'grad': 'linear-gradient(160deg,#1a1a2e,#e74c3c)', 'desc': 'El espíritu del rock en el paraíso. Piscinas, spa y la mejor música en vivo.'},
-    32:  {'nom': 'Hard Rock Hotel Tenerife',  'loc': 'Tenerife, España',            'pais': '🇪🇸', 'estrellas': 5, 'precio': 200, 'tag': 'Ocean view', 'grad': 'linear-gradient(160deg,#2d3436,#e17055)', 'desc': 'Impresionantes vistas al Atlántico desde las laderas del Teide.'},
-    83:  {'nom': 'Grand Palladium Imbassai',  'loc': 'Bahia, Brasil',               'pais': '🇧🇷', 'estrellas': 5, 'precio': 160, 'tag': 'Todo incluido', 'grad': 'linear-gradient(160deg,#00b09b,#1e3c72)', 'desc': 'Naturaleza intacta entre la selva atlántica y las aguas cristalinas del nordeste brasileño.'},
-    92:  {'nom': 'Grand Palladium Jamaica',   'loc': 'Montego Bay, Jamaica',        'pais': '🇯🇲', 'estrellas': 5, 'precio': 190, 'tag': 'Adults only', 'grad': 'linear-gradient(160deg,#1a6b3c,#f9ca24)', 'desc': 'El ritmo caribeño bajo las palmeras de la bahía más famosa de Jamaica.'},
-    94:  {'nom': 'Grand Palladium Palace',    'loc': 'Ibiza, España',               'pais': '🇪🇸', 'estrellas': 5, 'precio': 310, 'tag': 'Luxury', 'grad': 'linear-gradient(160deg,#2c3e50,#3498db)', 'desc': 'Lujo mediterráneo en primera línea de playa con el exclusivo club de socios TRS.'},
-    96:  {'nom': 'TRS Coral Hotel',           'loc': 'Costa Mujeres, México',       'pais': '🇲🇽', 'estrellas': 5, 'precio': 320, 'tag': 'Luxury adults', 'grad': 'linear-gradient(160deg,#0099f7,#00d2d3)', 'desc': 'Exclusivo resort adults-only frente a aguas turquesas a minutos de Cancún.'},
-    99:  {'nom': 'TRS Cap Cana Hotel',        'loc': 'Cap Cana, Rep. Dom.',         'pais': '🇩🇴', 'estrellas': 5, 'precio': 350, 'tag': 'Ultra luxury', 'grad': 'linear-gradient(160deg,#0f0c29,#302b63)', 'desc': 'La joya del Caribe. Diseño arquitectónico único con butler service y gastronomía de autor.'},
-    106: {'nom': 'Grand Palladium Riviera',   'loc': 'Playa del Carmen, México',    'pais': '🇲🇽', 'estrellas': 5, 'precio': 240, 'tag': 'Todo incluido', 'grad': 'linear-gradient(160deg,#11998e,#38ef7d)', 'desc': 'Selva maya, cenotes y playas turquesas en la Riviera Maya.'},
-    107: {'nom': 'Grand Palladium Punta Cana','loc': 'Punta Cana, Rep. Dom.',       'pais': '🇩🇴', 'estrellas': 5, 'precio': 170, 'tag': 'Todo incluido', 'grad': 'linear-gradient(160deg,#005c97,#363795)', 'desc': 'Resort de playa con 11 piscinas, 14 restaurantes y el mejor todo incluido del Caribe.'},
+    6:   {'nom': 'Palladium Vallarta',                      'loc': 'Puerto Vallarta, México',  'pais': '🇲🇽', 'estrellas': 5, 'precio': 216, 'tag': 'Todo incluido', 'grad': 'linear-gradient(160deg,#0d7377,#14a085)', 'desc': 'Resort frente al Pacífico mexicano.'},
+    9:   {'nom': 'Dominican Fiesta Hotel & Casino',         'loc': 'Santo Domingo, Rep. Dom.', 'pais': '🇩🇴', 'estrellas': 4, 'precio': 100, 'tag': 'Hotel & Casino', 'grad': 'linear-gradient(160deg,#c0392b,#8e44ad)', 'desc': 'Hotel y casino en la capital dominicana.'},
+    83:  {'nom': 'Grand Palladium Imbassai Resort & Spa',   'loc': 'Bahía, Brasil',            'pais': '🇧🇷', 'estrellas': 5, 'precio': 392, 'tag': 'Todo incluido', 'grad': 'linear-gradient(160deg,#00b09b,#1e3c72)', 'desc': 'Resort entre la selva atlántica del nordeste brasileño.'},
+    92:  {'nom': 'Grand Palladium Jamaica & Lady Hamilton', 'loc': 'Montego Bay, Jamaica',     'pais': '🇯🇲', 'estrellas': 5, 'precio': 235, 'tag': 'Todo incluido', 'grad': 'linear-gradient(160deg,#1a6b3c,#f9ca24)', 'desc': 'Resort caribeño en la bahía de Montego Bay.'},
+    96:  {'nom': 'Complejo Costa Mujeres',                  'loc': 'Costa Mujeres, México',    'pais': '🇲🇽', 'estrellas': 5, 'precio': 305, 'tag': 'Luxury', 'grad': 'linear-gradient(160deg,#0099f7,#00d2d3)', 'desc': 'Complejo frente a aguas turquesas a minutos de Cancún.'},
+    99:  {'nom': 'TRS Cap Cana',                            'loc': 'Cap Cana, Rep. Dom.',      'pais': '🇩🇴', 'estrellas': 5, 'precio': 267, 'tag': 'Adults only', 'grad': 'linear-gradient(160deg,#0f0c29,#302b63)', 'desc': 'Resort exclusivo solo para adultos en Cap Cana.'},
+    106: {'nom': 'Complejo Riviera Maya',                   'loc': 'Playa del Carmen, México', 'pais': '🇲🇽', 'estrellas': 5, 'precio': 242, 'tag': 'Todo incluido', 'grad': 'linear-gradient(160deg,#11998e,#38ef7d)', 'desc': 'Complejo en la Riviera Maya: selva, cenotes y playa.'},
+    107: {'nom': 'Complejo Punta Cana',                     'loc': 'Punta Cana, Rep. Dom.',    'pais': '🇩🇴', 'estrellas': 5, 'precio': 180, 'tag': 'Todo incluido', 'grad': 'linear-gradient(160deg,#005c97,#363795)', 'desc': 'Complejo de playa en Punta Cana.'},
 }
 
 @app.route('/')
@@ -586,7 +894,8 @@ def predecir_publico():
     distancia  = DISTANCIA_POR_PAIS.get(pais_agrup, 'No Info')
     pax        = adultos + nenes
     pax_tipo   = 'SINGLE' if pax == 1 else ('PAREJAS' if pax == 2 else 'FAMILIAS')
-    global_mean = GLOBAL_MEANS.get(segmento, 0.35)
+    # País real; segmento de mercado y habitación no se piden en la web pública → media global
+    cod_pais = _cod_pais(pais_agrup)
 
     features = {
         'ANTELACION_DIAS':              antelacion,
@@ -594,9 +903,9 @@ def predecir_publico():
         'NOCHES':                       noches,
         'NENES':                        nenes,
         'BEBES':                        bebes,
-        'SEGMENTO_COD':                 global_mean,
-        'PAIS_AGRUPADO_COD':            global_mean,
-        'HABITACION_LIMPIA_COD':        global_mean,
+        'SEGMENTO_COD':                 _MEDIA_GLOBAL_ENC,
+        'PAIS_AGRUPADO_COD':            cod_pais,
+        'HABITACION_LIMPIA_COD':        _MEDIA_GLOBAL_ENC,
         'GRUPO_TIPO_COD':               0,
         'FUENTE_NEGOCIO_DIRECT SALES':  0,
         'FUENTE_NEGOCIO_E-COMMERCE':    1,
@@ -617,7 +926,7 @@ def predecir_publico():
     clf  = MODELOS[segmento].named_steps['modelo']
     X20  = np.array([[float(features.get(c, 0.0)) for c in COLUMNAS_PIPELINE]], dtype=np.float64)
     prob = round(float(clf.predict_proba(X20)[0][1]) * 100, 1)
-    riesgo = 'ALTO' if prob > 65 else ('MEDIO' if prob > 35 else 'BAJO')
+    riesgo = calcular_riesgo(prob, segmento)
 
     total_precio = round(adr * noches * adultos, 2)
 
@@ -651,7 +960,7 @@ def predecir_publico():
         'pax_tipo':     pax_tipo,
         'prob':         prob,
         'riesgo':       riesgo,
-        'explicacion':  _generar_explicacion(features, meta_h),
+        'explicacion':  generar_explicacion(features, meta_h, segmento),
     }
     RESERVAS_SIMULADAS.append(registro_pub)
     _guardar_reservas_simuladas()
@@ -696,7 +1005,10 @@ def estadisticas():
                                datos_orig=datos_orig_full, segmentos_info=segmentos_info,
                                hoteles_disponibles=hoteles_disponibles,
                                analytics=analytics,
-                               reservas_simuladas=sims_usuario)
+                               reservas_simuladas=sims_usuario,
+                               fecha_corte=FECHA_CORTE,
+                               umbrales_riesgo=UMBRALES_RIESGO,
+                               shap_activo=SHAP_OK)
 
     totales = {
         'reservas':   sum(len(df) for df in DATOS.values()),
@@ -751,7 +1063,9 @@ def estadisticas():
                            segmentos_info=segmentos_info,
                            hoteles_disponibles=hoteles_disponibles,
                            analytics=analytics,
-                           reservas_simuladas=sims_usuario)
+                           reservas_simuladas=sims_usuario,
+                           fecha_corte=FECHA_CORTE,
+                           umbrales_riesgo=UMBRALES_RIESGO)
 
 
 
@@ -778,8 +1092,12 @@ def nueva_reserva():
             adr_por_hotel[hid].append(adr)
     adr_medias = {hid: round(sum(v) / len(v), 2) for hid, v in adr_por_hotel.items()}
 
+    # Segmentos de mercado reales del encoder (no dependen del hotel, seguros de ofrecer)
+    segmentos_mkt = sorted(MAPEOS_ENCODING.get('SEGMENTO', {}).keys())
+
     return render_template('nueva_reserva.html', usuario=usuario,
-                           hoteles=hoteles, paises=paises, adr_medias=adr_medias)
+                           hoteles=hoteles, paises=paises, adr_medias=adr_medias,
+                           segmentos_mkt=segmentos_mkt)
 
 
 @app.route('/api/predecir', methods=['POST'])
@@ -820,6 +1138,11 @@ def api_predecir():
     distancia  = DISTANCIA_POR_PAIS.get(pais_agrup, 'No Info')
     pax        = adultos + nenes
     pax_tipo   = 'SINGLE' if pax == 1 else ('PAREJAS' if pax == 2 else 'FAMILIAS')
+    # Codificación REAL: país y segmento de mercado (elegidos en el formulario).
+    # La habitación depende de cada hotel → no se pide, se usa la media global (neutral).
+    segmento_sel = str(data.get('segmento_mkt', '') or '').strip()
+    cod_pais     = _cod_pais(pais_agrup)
+    cod_seg_mkt  = _cod_segmento(segmento_sel) if segmento_sel else _MEDIA_GLOBAL_ENC
 
     features = {
         'ANTELACION_DIAS':              antelacion,
@@ -827,6 +1150,9 @@ def api_predecir():
         'NOCHES':                       noches,
         'NENES':                        nenes,
         'BEBES':                        bebes,
+        'SEGMENTO_COD':                 cod_seg_mkt,
+        'PAIS_AGRUPADO_COD':            cod_pais,
+        'HABITACION_LIMPIA_COD':        _MEDIA_GLOBAL_ENC,
         'GRUPO_TIPO_COD':               grupo_cod,
         'FUENTE_NEGOCIO_DIRECT SALES':  1 if fuente == 'DIRECT SALES'  else 0,
         'FUENTE_NEGOCIO_E-COMMERCE':    1 if fuente == 'E-COMMERCE'    else 0,
@@ -852,8 +1178,8 @@ def api_predecir():
     clf  = MODELOS[segmento].named_steps['modelo']
     X20  = np.array([[float(features.get(c, 0.0)) for c in COLUMNAS_PIPELINE]], dtype=np.float64)
     prob = round(float(clf.predict_proba(X20)[0][1]) * 100, 1)
-    riesgo  = 'ALTO' if prob > 65 else ('MEDIO' if prob > 35 else 'BAJO')
-    explicacion = _generar_explicacion(features, meta)
+    riesgo = calcular_riesgo(prob, segmento)
+    explicacion = generar_explicacion(features, meta, segmento)
 
     # Guardar en historial de simulaciones
     from datetime import datetime as _dt2
@@ -910,6 +1236,14 @@ def eliminar_reserva_simulada(sim_id):
     return jsonify({'ok': True})
 
 
+@app.route('/api/dashboard')
+@login_required
+def api_dashboard():
+    """Devuelve la agregación del dashboard para una fecha de corte dada."""
+    corte = request.args.get('corte') or FECHA_CORTE
+    return jsonify({'corte': corte, 'meses': agregar_dashboard(corte)})
+
+
 @app.route('/api/datos_segmento/<segmento>')
 @login_required
 def api_datos_segmento(segmento):
@@ -928,11 +1262,14 @@ def api_datos_segmento(segmento):
 # ==========================================
 
 if __name__ == '__main__':
+    # En Render (y otros hosts) el puerto lo asigna la plataforma vía la variable
+    # de entorno PORT. En local usa FLASK_PORT (5050).
+    puerto = int(os.environ.get('PORT', FLASK_PORT))
     print(f"\n{'='*60}")
     print("APLICACIÓN PALLADIUM - PREDICTOR DE CANCELACIONES")
     print(f"{'='*60}")
-    print(f"Accediendo a: http://{FLASK_HOST}:{FLASK_PORT}")
+    print(f"Escuchando en el puerto: {puerto}")
     print(f"Modelos cargados: {list(MODELOS.keys())}")
     print(f"{'='*60}\n")
 
-    app.run(host='0.0.0.0', port=FLASK_PORT, debug=False)
+    app.run(host='0.0.0.0', port=puerto, debug=False)

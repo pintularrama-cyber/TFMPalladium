@@ -60,7 +60,8 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f4f6f9;
 
 /* CARD IMAGE */
 .card-img{height:190px;position:relative;display:flex;align-items:flex-end;padding:16px;}
-.card-img::after{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,rgba(0,0,0,.65) 100%);}
+.card-img::after{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,rgba(0,0,0,.65) 100%);z-index:0;}
+.card-img-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;}
 .card-tag{background:rgba(255,255,255,.95);color:#2c3e50;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;z-index:1;position:relative;}
 .card-fav{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.9);border:none;border-radius:50%;width:34px;height:34px;font-size:16px;cursor:pointer;z-index:1;display:flex;align-items:center;justify-content:center;transition:background .2s;}
 .card-fav:hover{background:#fff;}
@@ -89,7 +90,7 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f4f6f9;
 .modal-overlay.open{display:flex;align-items:center;justify-content:center;}
 .modal{background:#fff;border-radius:20px;width:90%;max-width:560px;max-height:92vh;overflow-y:auto;box-shadow:0 40px 80px rgba(0,0,0,.35);}
 .modal-img{height:180px;position:relative;display:flex;align-items:flex-end;padding:20px;}
-.modal-img::after{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,transparent 30%,rgba(0,0,0,.7) 100%);}
+.modal-img::after{content:'';position:absolute;inset:0;background:linear-gradient(to bottom,transparent 30%,rgba(0,0,0,.7) 100%);z-index:0;}
 .modal-img-text{position:relative;z-index:1;color:#fff;}
 .modal-img-text h3{font-size:22px;font-weight:800;margin-bottom:2px;}
 .modal-img-text p{font-size:13px;opacity:.85;}
@@ -158,12 +159,12 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f4f6f9;
 <section class="hero">
     <div class="hero-content">
         <h1>Tu próxima escapada<br>en un <em>Palladium</em></h1>
-        <p>12 destinos exclusivos · Todo incluido · Adultos y familias</p>
+        <p>8 destinos exclusivos · Todo incluido · Adultos y familias</p>
 
         <div class="search-box">
             <div class="s-field" style="flex:2;min-width:180px;">
                 <label>Destino o hotel</label>
-                <input type="text" id="s-destino" placeholder="Ej: Ibiza, México, Caribe…" oninput="filtrarCards()">
+                <input type="text" id="s-destino" placeholder="Ej: México, Caribe, Brasil…" oninput="filtrarCards()">
             </div>
             <div class="s-field">
                 <label>Check-in</label>
@@ -218,7 +219,6 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f4f6f9;
     <!-- FILTROS POR ZONA -->
     <div class="filter-bar">
         <button class="filter-chip active" onclick="filtrarZona('todos', this)">Todos</button>
-        <button class="filter-chip" onclick="filtrarZona('España', this)">🇪🇸 España</button>
         <button class="filter-chip" onclick="filtrarZona('México', this)">🇲🇽 México</button>
         <button class="filter-chip" onclick="filtrarZona('Rep. Dom.', this)">🇩🇴 Caribe</button>
         <button class="filter-chip" onclick="filtrarZona('Brasil', this)">🇧🇷 Brasil</button>
@@ -236,8 +236,10 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f4f6f9;
              data-tag="{{ h.tag|lower }}"
              onclick="abrirModal({{ hid }})">
 
-            <!-- Imagen CSS -->
+            <!-- Imagen real del hotel (si existe en static/img); si no, degradado -->
             <div class="card-img" style="background:{{ h.grad }};">
+                <img class="card-img-photo" src="{{ url_for('static', filename='img/hotel_' ~ hid ~ '.jpg') }}"
+                     alt="{{ h.nom }}" onerror="this.remove()">
                 <div class="card-stars">{% for i in range(h.estrellas) %}<span>★</span>{% endfor %}</div>
                 <button class="card-fav" onclick="event.stopPropagation();this.textContent=this.textContent=='♡'?'❤️':'♡'">♡</button>
                 <span class="card-tag">{{ h.tag }}</span>
@@ -275,6 +277,7 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f4f6f9;
 
     <!-- Cabecera con imagen -->
     <div class="modal-img" id="modal-img">
+        <img id="modal-img-photo" class="card-img-photo" alt="">
         <button class="modal-close" onclick="cerrarModal()">✕</button>
         <div class="modal-img-text">
             <h3 id="modal-nom">—</h3>
@@ -448,6 +451,11 @@ function abrirModal(hid) {
     document.getElementById('modal-nom').textContent = h.nom;
     document.getElementById('modal-loc').textContent = h.pais + '  ' + h.loc;
     document.getElementById('modal-img').style.background = h.grad;
+    // Imagen real del hotel (si existe); si no, queda el degradado
+    const mp = document.getElementById('modal-img-photo');
+    mp.style.display = '';
+    mp.onerror = () => { mp.style.display = 'none'; };
+    mp.src = '/static/img/hotel_' + hid + '.jpg';
 
     // Pre-rellenar fechas del buscador
     const ci = document.getElementById('s-checkin').value;

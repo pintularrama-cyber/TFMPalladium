@@ -46,27 +46,38 @@ USUARIOS = {
 # CONFIGURACIÓN DE SEGMENTOS
 # ==========================================
 
+UMBRALES_RIESGO = {
+    'PEQUEÑO': {'alto': 38, 'medio': 19},
+    'MEDIANO': {'alto': 57, 'medio': 28},
+    'GRANDE':  {'alto': 45, 'medio': 22},
+}
+
+# AUC-ROC de los modelos OPTIMIZADOS (GridSearch/RandomSearch), medidos sobre el
+# conjunto de TEST en el notebook "Modelos avanzados I (con tunning)"
+# (carpeta drive documentos/colabs). Valores verificados, no inventados.
+# El MEDIANO usa los mismos hiperparámetros que el .joblib de producción
+# (n_estimators=280, max_depth=11, lr=0.08). Datos: 27.113 / 152.768 / 965.010 filas.
 SEGMENTOS = {
     'PEQUEÑO': {
         'min_habs': 0,
         'max_habs': 250,
         'modelo_archivo': 'pipeline_pequeno.joblib',
         'algoritmo': 'Random Forest',
-        'auc_roc': 0.8425
+        'auc_roc': 0.8473
     },
     'MEDIANO': {
         'min_habs': 250,
         'max_habs': 500,
         'modelo_archivo': 'pipeline_mediano.joblib',
         'algoritmo': 'XGBoost',
-        'auc_roc': 0.8425
+        'auc_roc': 0.8668
     },
     'GRANDE': {
         'min_habs': 500,
         'max_habs': 10000,
         'modelo_archivo': 'pipeline_grande.joblib',
         'algoritmo': 'XGBoost',
-        'auc_roc': 0.8169
+        'auc_roc': 0.8513
     }
 }
 
@@ -98,8 +109,9 @@ GLOBAL_MEANS = {
 # VALORES PARA DROPDOWNS
 # ==========================================
 
+# Categorías reales de habitación (de documentacion/CAT_HABITACIONES.csv)
 HABITACIONES_LIMPIAS = [
-    'Suite', 'Junior_Suite', 'Doble', 'Sencilla'
+    'Suite', 'Junior Suite', 'Deluxe', 'Superior', 'Presidential', 'Standard'
 ]
 
 PAISES_AGRUPADOS = [
@@ -124,26 +136,23 @@ DISTANCIA_POR_PAIS = {
 # (extraído del notebook 00_Limpieza-2.ipynb)
 # ==========================================
 
-# Segmento por ID_HOTEL (Cell 126 del notebook de limpieza)
+# Segmento por ID_HOTEL — 8 hoteles reales (de documentacion/catalogo_hoteles_final.csv)
 HOTEL_SIZE_MAPPING = {
-    0: 'PEQUEÑO', 5: 'PEQUEÑO', 12: 'PEQUEÑO', 16: 'PEQUEÑO', 19: 'PEQUEÑO',
-    20: 'PEQUEÑO', 22: 'PEQUEÑO', 27: 'PEQUEÑO', 97: 'PEQUEÑO', 99: 'PEQUEÑO',
-    100: 'PEQUEÑO',
-    6: 'MEDIANO', 9: 'MEDIANO', 14: 'MEDIANO', 15: 'MEDIANO', 17: 'MEDIANO',
-    21: 'MEDIANO', 23: 'MEDIANO', 24: 'MEDIANO', 25: 'MEDIANO', 26: 'MEDIANO',
-    28: 'MEDIANO', 30: 'MEDIANO', 31: 'MEDIANO', 98: 'MEDIANO', 102: 'MEDIANO',
-    103: 'MEDIANO', 110: 'MEDIANO',
-    32: 'GRANDE', 83: 'GRANDE', 92: 'GRANDE', 94: 'GRANDE', 96: 'GRANDE',
-    106: 'GRANDE', 107: 'GRANDE',
+    99: 'PEQUEÑO',
+    6: 'MEDIANO', 9: 'MEDIANO',
+    83: 'GRANDE', 92: 'GRANDE', 96: 'GRANDE', 106: 'GRANDE', 107: 'GRANDE',
 }
 
-# Nombres legibles de los hoteles del dataset activo
+# Nombres reales de los hoteles (de documentacion/catalogo_hoteles_final.csv)
 HOTEL_NOMBRES = {
-    6: 'Palladium Vallarta', 9: 'Dominican Fiesta H&C',
-    15: 'Ushuaïa Ibiza', 30: 'Hard Rock Ibiza', 32: 'Hard Rock Tenerife',
-    83: 'Grand Palladium Imbassai', 92: 'Grand Palladium Jamaica',
-    94: 'GP Palace Ibiza', 96: 'Costa Mujeres', 99: 'TRS Cap Cana',
-    106: 'Riviera Maya', 107: 'Punta Cana',
+    6:   'Palladium Vallarta',
+    9:   'Dominican Fiesta Hotel & Casino',
+    83:  'Grand Palladium Imbassai Resort & Spa',
+    92:  'Grand Palladium Jamaica & Lady Hamilton Resort',
+    96:  'Complejo Costa Mujeres',
+    99:  'TRS Cap Cana',
+    106: 'Complejo Riviera Maya',
+    107: 'Complejo Punta Cana',
 }
 
 # Status → STATUS_BOOL (Cell 56)

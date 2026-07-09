@@ -8,3 +8,5 @@ numpy==2.2.0
 pandas==2.2.3
 scikit-learn==1.6.1
 xgboost==2.0.3
+shap>=0.44
+gunicorn==22.0.0

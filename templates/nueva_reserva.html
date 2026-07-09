@@ -258,7 +258,7 @@ input[type="checkbox"].toggle {
 
 {% block content %}
 <div class="content-header">
-    <h2>🔮 Simular nueva reserva</h2>
+    <h2>📝 Simular nueva reserva</h2>
     <p>Introduce los datos de una reserva y el modelo calculará la probabilidad de cancelación en tiempo real.</p>
 </div>
 
@@ -354,6 +354,16 @@ input[type="checkbox"].toggle {
                 </select>
             </div>
 
+            <div class="form-group">
+                <label>Segmento de mercado</label>
+                <select name="segmento_mkt" id="segmento_mkt">
+                    <option value="">— Selecciona segmento —</option>
+                    {% for s in segmentos_mkt %}
+                    <option value="{{ s }}">{{ s.title() }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
             <!-- Canal fijo: online -->
             <div class="form-group">
                 <label>Canal de reserva</label>
@@ -371,7 +381,7 @@ input[type="checkbox"].toggle {
             </div>
 
             <button type="submit" class="btn-predict" id="btn-predecir">
-                🔮 Calcular predicción
+                📊 Calcular predicción
             </button>
         </form>
     </div>
@@ -536,6 +546,7 @@ function predecir(e) {
         nenes:      parseInt(document.getElementById('nenes').value) || 0,
         bebes:      parseInt(document.getElementById('bebes').value) || 0,
         pais:       document.getElementById('pais').value,
+        segmento_mkt: document.getElementById('segmento_mkt').value,
         fuente:     'E-COMMERCE',
         es_grupo:   document.getElementById('es_grupo').checked,
     };

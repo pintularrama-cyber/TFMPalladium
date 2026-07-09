@@ -5,7 +5,7 @@ Se abre en el navegador; solo necesitas Python instalado.
 
 ---
 
-## Opción A — Ejecutar en tu propio ordenador
+## Opción A — Descargar y ejecutar en tu propio ordenador (con Git)
 
 ### 1. Instalar Python (si no lo tienes)
 
@@ -21,26 +21,55 @@ Tiene que salir algo como `Python 3.11.x` (cualquier versión 3.10 o superior va
 
 ---
 
-### 2. Descomprimir el proyecto
+### 2. Instalar Git (si no lo tienes)
 
-Descomprime el ZIP en cualquier carpeta de tu ordenador, por ejemplo el Escritorio.  
-Dentro verás una carpeta llamada `Visual Palladium`.
+- **Windows**: descarga desde https://git-scm.com/download/win e instala con las opciones por defecto (dale a "Siguiente" en todo).
+- **Mac**: abre la app **Terminal** y escribe `git --version`. Si no lo tienes, macOS te ofrecerá instalarlo automáticamente. (O descárgalo de https://git-scm.com/download/mac)
+
+Para comprobar que está instalado:
+```
+git --version
+```
 
 ---
 
-### 3. Abrir una terminal en esa carpeta
+### 3. Aceptar la invitación al repositorio
 
-**Mac:**
-1. Abre la app **Terminal** (búscala en Spotlight con Cmd+Espacio).
-2. Escribe `cd ` (con espacio al final), arrastra la carpeta `Visual Palladium` a la terminal y pulsa Enter.
+El proyecto es **privado**, así que primero tienes que aceptar la invitación:
+
+1. Necesitas una cuenta en https://github.com (gratis).
+2. Pídele a Erik que te invite con tu **usuario de GitHub**.
+3. Acepta la invitación entrando aquí: **https://github.com/eriikvidal/tfm-palladium/invitations**  
+   (o desde el email que te llega, o el banner amarillo al entrar al repo).
+
+---
+
+### 4. Descargar el proyecto (clonar)
+
+Abre una terminal, ve a donde quieras guardarlo (por ejemplo el Escritorio) y clónalo:
+
+**Mac / Linux:**
+```bash
+cd ~/Desktop
+git clone https://github.com/eriikvidal/tfm-palladium.git
+cd tfm-palladium
+```
 
 **Windows:**
-1. Abre la carpeta `Visual Palladium` en el Explorador de archivos.
-2. Haz clic en la barra de direcciones, escribe `cmd` y pulsa Enter.
+```bash
+cd %USERPROFILE%\Desktop
+git clone https://github.com/eriikvidal/tfm-palladium.git
+cd tfm-palladium
+```
+
+> La primera vez te pedirá **iniciar sesión en GitHub** (se abre el navegador o te pide
+> usuario y contraseña). Inicia sesión con tu cuenta y ya tendrás acceso.  
+> Si te pide "contraseña" en la terminal y no funciona, es porque GitHub ya no acepta
+> contraseñas ahí: usa el botón de iniciar sesión con el navegador que aparece.
 
 ---
 
-### 4. Crear el entorno virtual e instalar dependencias
+### 5. Crear el entorno virtual e instalar dependencias
 
 Copia y pega estos comandos **uno a uno**:
 
@@ -62,7 +91,7 @@ El último paso descarga las librerías — puede tardar 1-2 minutos la primera 
 
 ---
 
-### 5. Arrancar la aplicación
+### 6. Arrancar la aplicación
 
 ```bash
 python app.py
