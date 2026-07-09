@@ -1,5 +1,5 @@
 # ==========================================
-# APLICACIÓN FLASK - PREDICTOR PALLADIUM (PRO)
+# APLICACIÓN FLASK - PREDICTOR PALLADIUM (PRO 2GB)
 # ==========================================
 
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
@@ -39,7 +39,7 @@ def calcular_riesgo(prob, segmento):
 
 
 def cargar_modelos():
-    """Carga permanentemente todos los pipelines y sus explainers SHAP en memoria (Rendimiento inmediato)."""
+    """Carga permanentemente todos los pipelines y sus explainers SHAP en memoria."""
     global SHAP_OK
     import sys
     import preprocesamiento as _prep
@@ -246,7 +246,7 @@ def generar_explicacion(features, meta, segmento):
 
 
 def cargar_datos():
-    """Carga los CSVs completos de entrenamiento directamente en la RAM (Gracias a los 2 GB)."""
+    """Carga los CSVs completos de entrenamiento directamente en la RAM."""
     archivos = {
         'PEQUEÑO': 'df_pequeno.csv',
         'MEDIANO': 'df_mediano.csv',
@@ -372,7 +372,7 @@ def cargar_datos_originales():
                 'PAX', 'ADULTOS', 'NENES', 'BEBES', 'PAIS', 'FUENTE_NEGOCIO',
                 'TIPO', 'STATUS', 'ID_MULTIPLE', 'MONEDA', 'SEGMENTO',
                 'VALHAB', 'VALPEN', 'VALSERV', 'VALFIJOS']
-        # Con 2 GB cargamos la muestra estándar de 10.000 filas para el dashboard
+        # Cargamos la muestra completa de 10.000 filas para el dashboard
         df = pd.read_csv(ruta, sep=';', nrows=10000, usecols=cols,
                          on_bad_lines='skip', low_memory=False)
         print(f"OK: CSV original leído ({len(df)} filas)")
@@ -791,7 +791,7 @@ def predecir_publico():
         'pax_tipo':     pax_tipo,
         'prob':         prob,
         'riesgo':       riesgo,
-        'explicacion':  _generar_explicacion_shap(features, segmento),  # SHAP Puro e Inmediato
+        'explicacion':  _generar_explicacion_shap(features, segmento),  # SHAP Real e inmediato
     }
     RESERVAS_SIMULADAS.append(registro_pub)
     _guardar_reservas_simuladas()
@@ -829,7 +829,7 @@ def estadisticas():
                     if r.get('usuario') == usuario or r.get('tipo') == 'cliente']
     sims_usuario = sorted(sims_usuario, key=lambda x: x.get('id',''), reverse=True)
 
-    if ESTADISTICAS_TOTALES is None:
+    if not DATOS:
         return render_template('estadisticas.html', usuario=usuario,
                                totales=None, por_segmento={}, reservas=[],
                                datos_orig=datos_orig_full, segmentos_info=segmentos_info,
@@ -840,19 +840,62 @@ def estadisticas():
                                umbrales_riesgo=UMBRALES_RIESGO,
                                shap_activo=SHAP_OK)
 
+    totales = {
+        'reservas':   sum(len(df) for df in DATOS.values()),
+        'canceladas': sum(int(df['STATUS_BOOL'].sum()) for df in DATOS.values()),
+    }
+    totales['tasa'] = round(totales['canceladas'] / totales['reservas'] * 100, 2)
+
+    por_segmento = {}
+    for seg, df in DATOS.items():
+        por_segmento[seg] = {
+            'total':      len(df),
+            'canceladas': int(df['STATUS_BOOL'].sum()),
+            'tasa':       round(float(df['STATUS_BOOL'].mean()) * 100, 2),
+            'algoritmo':  SEGMENTOS[seg]['algoritmo'],
+            'auc_roc':    SEGMENTOS[seg]['auc_roc'],
+        }
+
+    def get_ohe(row, prefix, baseline):
+        for col in row.index:
+            if col.startswith(prefix) and float(row[col]) == 1.0:
+                return col[len(prefix):]
+        return baseline
+
+    SAMPLE = 300
+    reservas = []
+    for seg, df in DATOS.items():
+        muestra = df.sample(min(SAMPLE, len(df)), random_state=42).reset_index(drop=True)
+
+        for i, row in muestra.iterrows():
+            cancelada = bool(row.get('STATUS_BOOL', False))
+            prob = None
+            riesgo_pred = None
+            reservas.append({
+                'seg':        seg,
+                'adr':        round(float(row.get('ADR', 0)), 0),
+                'noches':     int(row.get('NOCHES', 0)),
+                'antelacion': int(row.get('ANTELACION_DIAS', 0)),
+                'fuente':     get_ohe(row, 'FUENTE_NEGOCIO_', 'Corporate'),
+                'temporada':  get_ohe(row, 'TEMPORADA_', 'Alta'),
+                'distancia':  get_ohe(row, 'DISTANCIA_', 'Corto'),
+                'pax_tipo':   get_ohe(row, 'PAX_TIPO_', 'Familias'),
+                'grupo':      'Grupo' if int(row.get('GRUPO_TIPO_COD', 0)) == 1 else 'Individual',
+                'cancelada':  cancelada,
+                'estado':     'CANCELADA' if cancelada else 'ACTIVA',
+                'prob_pred':  prob,
+                'riesgo_pred': riesgo_pred,
+            })
+
     return render_template('estadisticas.html', usuario=usuario,
-                           totales=ESTADISTICAS_TOTALES, 
-                           por_segmento=ESTADISTICAS_POR_SEGMENTO,
-                           reservas=MUESTRA_RESERVAS, 
-                           datos_orig=datos_orig_full,
+                           totales=totales, por_segmento=por_segmento,
+                           reservas=reservas, datos_orig=datos_orig_full,
                            segmentos_info=segmentos_info,
                            hoteles_disponibles=hoteles_disponibles,
                            analytics=analytics,
                            reservas_simuladas=sims_usuario,
                            fecha_corte=FECHA_CORTE,
-                           umbrales_riesgo=UMBRALES_RIESGO,
-                           shap_activo=SHAP_OK)
-
+                           umbrales_riesgo=UMBRALES_RIESGO)
 
 
 # ==========================================
@@ -961,7 +1004,7 @@ def api_predecir():
     prob = round(float(clf.predict_proba(X20)[0][1]) * 100, 1)
     riesgo = calcular_riesgo(prob, segmento)
     
-    # SHAP real e inmediato para tus simulaciones
+    # SHAP real e inmediato para el simulador de reservas
     explicacion = _generar_explicacion_shap(features, segmento)
 
     from datetime import datetime as _dt2
@@ -1022,4 +1065,33 @@ def eliminar_reserva_simulada(sim_id):
 @login_required
 def api_dashboard():
     corte = request.args.get('corte') or FECHA_CORTE
-    return jsonify({'corte': corte, 'meses': agregar_da
+    return jsonify({'corte': corte, 'meses': agregar_dashboard(corte)})
+
+
+@app.route('/api/datos_segmento/<segmento>')
+@login_required
+def api_datos_segmento(segmento):
+    if segmento not in DATOS:
+        return jsonify({'error': 'Datos no disponibles para este segmento'}), 404
+
+    df = DATOS[segmento]
+    return jsonify({
+        'total': len(df),
+        'canceladas': int(df['STATUS_BOOL'].sum()),
+        'tasa': round(df['STATUS_BOOL'].sum() / len(df) * 100, 2)
+    })
+
+# ==========================================
+# EJECUTAR APLICACIÓN
+# ==========================================
+
+if __name__ == '__main__':
+    puerto = int(os.environ.get('PORT', FLASK_PORT))
+    print(f"\n{'='*60}")
+    print("APLICACIÓN PALLADIUM - PREDICTOR DE CANCELACIONES (PREMIUM 2GB)")
+    print(f"{'='*60}")
+    print(f"Escuchando en el puerto: {puerto}")
+    print(f"Modelos pre-cargados en RAM: {list(MODELOS.keys())}")
+    print(f"{'='*60}\n")
+
+    app.run(host='0.0.0.0', port=puerto, debug=False)
