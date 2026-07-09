@@ -1155,8 +1155,11 @@ function openPanel(idx) {
         badge.style.color = '#999';
     }
 
+    // ── REEMPLÁZALA POR ESTA LÓGICA CORRECTA: ──
     const esFutura   = r.llegada && r.llegada > FECHA_CORTE_VAL;
-    const predCancel = prob !== null ? prob > 50 : null;
+
+// Si el riesgo predicho es ALTO, el modelo predice la cancelación comercialmente
+    const predCancel = r.riesgo_pred !== null ? (r.riesgo_pred === 'ALTO') : null;
 
     document.getElementById('v-real').style.display    = esFutura ? 'none' : '';
     document.getElementById('v-acierto').style.display = esFutura ? 'none' : '';
