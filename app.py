@@ -1,5 +1,5 @@
 # ==========================================
-# APLICACIÓN FLASK - PREDICTOR PALLADIUM (PRO 2GB)
+# APLICACIÓN FLASK - PREDICTOR PALLADIUM (PRO 2GB + SHAP GLOBAL)
 # ==========================================
 
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
@@ -188,6 +188,7 @@ def _valor_legible(col, features):
 
 
 def _generar_explicacion_shap(features, segmento):
+    """Explicación basada en los valores SHAP reales del modelo entrenado."""
     import numpy as np
     explainer = EXPLAINERS[segmento]
     X20 = np.array([[float(features.get(c, 0.0)) for c in COLUMNAS_PIPELINE]], dtype=np.float64)
@@ -241,12 +242,12 @@ def _generar_explicacion_shap(features, segmento):
 
 
 def generar_explicacion(features, meta, segmento):
-    """Obtiene la explicación SHAP real del modelo de forma obligatoria."""
+    """Punto de entrada único obligado a SHAP para garantizar consistencia científica."""
     return _generar_explicacion_shap(features, segmento)
 
 
 def cargar_datos():
-    """Carga los CSVs completos de entrenamiento directamente en la RAM."""
+    """Carga los CSVs completos de entrenamiento directamente en la RAM (Gracias a los 2 GB)."""
     archivos = {
         'PEQUEÑO': 'df_pequeno.csv',
         'MEDIANO': 'df_mediano.csv',
@@ -372,7 +373,7 @@ def cargar_datos_originales():
                 'PAX', 'ADULTOS', 'NENES', 'BEBES', 'PAIS', 'FUENTE_NEGOCIO',
                 'TIPO', 'STATUS', 'ID_MULTIPLE', 'MONEDA', 'SEGMENTO',
                 'VALHAB', 'VALPEN', 'VALSERV', 'VALFIJOS']
-        # Cargamos la muestra completa de 10.000 filas para el dashboard
+        # Con 2 GB cargamos la muestra estándar de 10.000 filas para el dashboard
         df = pd.read_csv(ruta, sep=';', nrows=10000, usecols=cols,
                          on_bad_lines='skip', low_memory=False)
         print(f"OK: CSV original leído ({len(df)} filas)")
