@@ -575,13 +575,15 @@ function mostrarResultado(d, payload) {
     document.getElementById('res-seg').innerHTML =
         `Segmento: <span class="hotel-badge ${segCls}">${d.segmento}</span> · Modelo ${d.segmento === 'PEQUEÑO' ? 'Random Forest' : 'XGBoost'}`;
 
-    // Gauge
+    // Gauge (OPTIMIZADO: Los colores dependen del RIESGO calculado por Python)
     const perc = d.prob;
     const ARC  = 251.3;
     const fill = (perc / 100) * ARC;
     const arc  = document.getElementById('arc-val');
     arc.setAttribute('stroke-dasharray', fill + ' ' + ARC);
-    const color = perc > 65 ? '#e74c3c' : (perc > 35 ? '#f39c12' : '#27ae60');
+    
+    // Unificación de colores del arco
+    const color = d.riesgo === 'ALTO' ? '#e74c3c' : (d.riesgo === 'MEDIO' ? '#f39c12' : '#27ae60');
     arc.setAttribute('stroke', color);
     document.getElementById('gauge-pct').textContent = perc.toFixed(1) + '%';
     document.getElementById('gauge-pct').setAttribute('fill', color);
@@ -591,15 +593,18 @@ function mostrarResultado(d, payload) {
     rb.textContent = 'Riesgo ' + d.riesgo;
     rb.className = 'riesgo-badge riesgo-' + d.riesgo;
 
-    // Veredicto
+    // Veredicto (OPTIMIZADO: Los textos dependen del RIESGO calculado por Python)
     const vb = document.getElementById('verdict-box');
     let msg = '';
-    if (perc > 65)
+    
+    if (d.riesgo === 'ALTO') {
         msg = `⚠️ El modelo predice <strong>alta probabilidad de cancelación (${perc}%)</strong>. Se recomienda contactar al cliente, ofrecer upgrades o políticas de cancelación más estrictas.`;
-    else if (perc > 35)
+    } else if (d.riesgo === 'MEDIO') {
         msg = `🔶 Probabilidad de cancelación <strong>moderada (${perc}%)</strong>. Mantener seguimiento y valorar incentivos de confirmación.`;
-    else
+    } else {
         msg = `✅ <strong>Baja probabilidad de cancelación (${perc}%)</strong>. El modelo considera esta reserva como sólida.`;
+    }
+    
     vb.innerHTML = msg;
     vb.className = 'verdict-box verdict-' + d.riesgo.toLowerCase();
 
@@ -610,7 +615,7 @@ function mostrarResultado(d, payload) {
     document.getElementById('m-temp').textContent   = d.temporada;
     document.getElementById('m-dist').textContent   = d.distancia;
 
-    // Factores
+    // Factores (SHAP Puro)
     const icons = { sube: '↑', baja: '↓', neutro: '→' };
     const fl = document.getElementById('factores-list');
     fl.innerHTML = (d.explicacion || []).map(f => `
