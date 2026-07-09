@@ -309,21 +309,18 @@ tr.row-activa    { background:#f7fdf9 !important; }
 
 {% block content %}
 <div class="content-header">
-    <h2>Análisis de Cancelaciones</h2>
-    <p>Palladium Hotel Group · Dataset 2022–2023</p>
+    <h2>📈 Panel de Control de Cancelaciones</h2>
+    <p>Visualiza el volumen histórico de cancelaciones y la distribución de riesgo predicha por los modelos.</p>
 </div>
 
-<!-- Tabs -->
+<!-- TABS -->
 <div class="tabs-bar">
-    <button class="tab-btn active" onclick="switchTab('analisis', this)">📊 Análisis</button>
-    <button class="tab-btn" onclick="switchTab('reservas', this)">🗂 Histórico</button>
-    <button class="tab-btn" onclick="switchTab('simuladas', this)" id="tab-btn-simuladas">
-        📋 Reservas
-        {% if reservas_simuladas %}<span class="sim-count-badge">{{ reservas_simuladas|length }}</span>{% endif %}
-    </button>
+    <button class="tab-btn active" onclick="switchTab('analisis')">📊 Análisis de Datos</button>
+    <button class="tab-btn" onclick="switchTab('historico')">📂 Histórico de Reservas</button>
+    <button class="tab-btn" onclick="switchTab('simuladas')">📝 Simulaciones Guardadas <span class="sim-count-badge" id="sim-badge">0</span></button>
 </div>
 
-<!-- TAB: ANÁLISIS -->
+<!-- TAB 1: ANALISIS -->
 <div id="tab-analisis" class="tab-pane active">
 
 {% if not totales %}
@@ -331,7 +328,7 @@ tr.row-activa    { background:#f7fdf9 !important; }
     <div class="no-data">
         <p style="font-size:48px;margin-bottom:12px;">📂</p>
         <h3 style="color:#2c3e50;margin-bottom:10px;">Datos no disponibles</h3>
-        <p>Copia <code>df_pequeno.csv</code>, <code>df_mediano.csv</code> y <code>df_grande.csv</code> en la carpeta del proyecto.</p>
+        <p>Copia los CSVs correspondientes para iniciar el análisis.</p>
     </div>
 </div>
 {% else %}
@@ -499,9 +496,9 @@ tr.row-activa    { background:#f7fdf9 !important; }
 <!-- Leyenda umbrales (solo visible en Futuras) -->
 <div class="leyenda-umbrales" id="leyenda-umbrales">
     <strong>Umbrales de riesgo por segmento:</strong>
-    &nbsp; Pequeño: <span style="color:#c0392b;font-weight:700;">ALTO &gt;38%</span> / MEDIO &gt;19%
-    &nbsp;·&nbsp; Mediano: <span style="color:#c0392b;font-weight:700;">ALTO &gt;57%</span> / MEDIO &gt;28%
-    &nbsp;·&nbsp; Grande: <span style="color:#c0392b;font-weight:700;">ALTO &gt;45%</span> / MEDIO &gt;22%
+    &nbsp; Pequeño: <span style="color:#c0392b;font-weight:700;">ALTO &gt;50%</span> / MEDIO &gt;25%
+    &nbsp;·&nbsp; Mediano: <span style="color:#c0392b;font-weight:700;">ALTO &gt;50%</span> / MEDIO &gt;25%
+    &nbsp;·&nbsp; Grande: <span style="color:#c0392b;font-weight:700;">ALTO &gt;50%</span> / MEDIO &gt;25%
 </div>
 
 <!-- Tabla PASADAS -->
@@ -628,20 +625,22 @@ tr.row-activa    { background:#f7fdf9 !important; }
     </div>
 
     <!-- Factores explicativos -->
-    <div class="factors-section" id="p-factors">
-        <div class="factors-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+    <div class="factors-section">
+        <div class="factors-title" style="display:flex; justify-content:space-between; align-items:center;">
             <span>Por qué el modelo predice este riesgo</span>
-            <span id="p-metodo-badge" style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;"></span>
+            <span class="badge" id="p-metodo-badge" style="font-size:10px;">—</span>
         </div>
-        <div id="factors-list"></div>
-        <p id="p-factors-footnote" style="font-size:11px;color:#aaa;margin-top:10px;line-height:1.4;"></p>
+        <div id="factors-list" style="margin-top:10px;"></div>
+        <p class="factor-desc" id="p-factors-footnote" style="margin-top:12px; font-size:10px; color:#95a5a6; font-style:italic; line-height:1.4;"></p>
     </div>
 
     <!-- Info del modelo -->
-    <div class="panel-model-info" id="p-model-info">
-        Segmento: <strong id="p-seg-label">—</strong> &nbsp;·&nbsp;
-        Algoritmo: <strong id="p-algo">—</strong> &nbsp;·&nbsp;
-        AUC-ROC: <strong id="p-auc">—</strong>
+    <div class="panel-model-info">
+        <span>Segmento evaluado: <strong id="p-seg-label">—</strong></span>
+        <span style="margin: 0 10px;">•</span>
+        <span>Algoritmo: <strong id="p-algo">—</strong></span>
+        <span style="margin: 0 10px;">•</span>
+        <span>AUC-ROC: <strong id="p-auc">—</strong></span>
     </div>
 </div>
 
@@ -653,77 +652,63 @@ tr.row-activa    { background:#f7fdf9 !important; }
 <div class="card" style="position:relative;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
         <div>
-            <h3 style="margin:0;border:none;padding:0;font-size:18px;">📋 Reservas</h3>
+            <h3 style="margin:0;border:none;padding:0;font-size:18px;">📋 Reservas Simuladas</h3>
             <p style="color:#7f8c8d;font-size:13px;margin-top:4px;">Reservas realizadas desde «Nueva Reserva» y desde la web de clientes. Haz clic en una fila para ver el detalle.</p>
         </div>
         {% if reservas_simuladas %}
-        <button onclick="borrarTodasSim()" style="background:#e74c3c;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">🗑 Borrar todas</button>
+        <button onclick="borrarTodasSim()" style="background:#e74c3c;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;">🗑️ Eliminar todas</button>
         {% endif %}
     </div>
 
     {% if not reservas_simuladas %}
-    <div style="text-align:center;padding:60px 20px;color:#bdc3c7;">
-        <div style="font-size:52px;margin-bottom:16px;">📋</div>
-        <h4 style="color:#7f8c8d;margin-bottom:8px;">Sin reservas todavía</h4>
-        <p style="font-size:13px;">Ve a <a href="{{ url_for('nueva_reserva') }}" style="color:#3498db;">Nueva Reserva</a> y crea una para verla aquí.</p>
-    </div>
+    <div style="text-align:center; padding:40px; color:#bbb; font-style:italic;">No hay simulaciones guardadas todavía. Simula una en el panel de reservas o realiza una simulación desde la web pública.</div>
     {% else %}
-    <div style="overflow-x:auto;">
-    <table class="tabla-reservas" id="tabla-sims" style="width:100%;">
-        <thead>
-            <tr>
-                <th>Canal</th>
-                <th>Fecha sim.</th>
-                <th>Hotel</th>
-                <th>Llegada</th>
-                <th>Noches</th>
-                <th>Pax</th>
-                <th>Antelación</th>
-                <th>ADR</th>
-                <th>Temporada</th>
-                <th>Riesgo</th>
-                <th style="text-align:right;">Probabilidad</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for s in reservas_simuladas %}
-            <tr class="sim-row" data-idx="{{ loop.index0 }}" onclick="abrirSimPanel({{ loop.index0 }})" style="cursor:pointer;">
-                <td>
-                    {% if s.tipo == 'cliente' %}
-                    <span class="badge badge-cliente">🌐 Web</span>
-                    {% else %}
-                    <span class="badge badge-interna">🔧 Interna</span>
-                    {% endif %}
-                </td>
-                <td style="white-space:nowrap;font-size:12px;color:#7f8c8d;">{{ s.fecha_sim }}</td>
-                <td style="font-weight:600;font-size:13px;">{{ s.hotel_nom }}</td>
-                <td style="font-size:13px;">{{ s.llegada }}</td>
-                <td style="text-align:center;">{{ s.noches }}</td>
-                <td style="text-align:center;font-size:12px;">{{ s.adultos }}A{% if s.nenes %} {{ s.nenes }}N{% endif %}{% if s.bebes %} {{ s.bebes }}B{% endif %}</td>
-                <td style="text-align:center;">{{ s.antelacion }}d</td>
-                <td style="text-align:right;">${{ s.adr }}</td>
-                <td style="text-align:center;font-size:12px;">{{ s.temporada }}</td>
-                <td>
-                    <span class="badge badge-{{ s.riesgo | lower }}">{{ s.riesgo }}</span>
-                </td>
-                <td style="text-align:right;font-weight:700;color:{% if s.riesgo=='ALTO' %}#e74c3c{% elif s.riesgo=='MEDIO' %}#f39c12{% else %}#27ae60{% endif %};">
-                    {{ s.prob }}%
-                </td>
-                <td onclick="event.stopPropagation();">
-                    <button onclick="borrarSim('{{ s.id }}')" style="background:none;border:none;cursor:pointer;color:#e74c3c;font-size:16px;padding:2px 6px;" title="Eliminar">✕</button>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Hotel</th>
+                    <th>Llegada</th>
+                    <th>ADR</th>
+                    <th style="text-align:center;">Noches</th>
+                    <th>Origen</th>
+                    <th>Origen Canal</th>
+                    <th style="text-align:center;">Prob.</th>
+                    <th>Riesgo</th>
+                    <th style="text-align:center;width:60px;">Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in reservas_simuladas %}
+                <tr onclick="abrirSimPanel({{ loop.index0 }})" style="cursor:pointer;" class="hover:bg-slate-50 transition">
+                    <td style="font-weight:700;">{{ s.hotel_nom }}</td>
+                    <td>{{ s.llegada }}</td>
+                    <td>${{ s.adr }}/noche</td>
+                    <td style="text-align:center;">{{ s.noches }}</td>
+                    <td>{{ s.pais.title() }}</td>
+                    <td>
+                        {% if s.tipo == 'cliente' %}
+                        <span class="badge badge-cliente">🌐 Web</span>
+                        {% else %}
+                        <span class="badge badge-interna">🔧 Interna</span>
+                        {% endif %}
+                    </td>
+                    <td style="text-align:center;font-weight:700;color:{% if s.riesgo=='ALTO' %}#e74c3c{% elif s.riesgo=='MEDIO' %}#f39c12{% else %}#27ae60{% endif %};">{{ s.prob }}%</td>
+                    <td><span class="badge badge-{{ s.riesgo | lower }}">{{ s.riesgo }}</span></td>
+                    <td style="text-align:center;" onclick="event.stopPropagation();">
+                        <button onclick="borrarSim('{{ s.id }}')" style="background:none;border:none;cursor:pointer;color:#e74c3c;font-size:16px;padding:2px 6px;" title="Eliminar Simulación">✕</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
     {% endif %}
 </div>
 
 <!-- Panel lateral de detalle simulación -->
 <div id="sim-panel" style="display:none;position:fixed;top:0;right:0;width:420px;height:100vh;background:#fff;box-shadow:-4px 0 20px rgba(0,0,0,.15);z-index:2000;overflow-y:auto;padding:28px 24px;">
-    <button onclick="cerrarSimPanel()" style="position:absolute;top:16px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:#7f8c8d;">✕</button>
+    <button onclick="cerrarSimPanel()" style="position:absolute;top:16px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:#7f8c8d; z-index:2100;">✕</button>
     <div id="sim-panel-content"></div>
 </div>
 <div id="sim-overlay" onclick="cerrarSimPanel()" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.3);z-index:1999;"></div>
@@ -740,32 +725,39 @@ function switchTab(name, btn) {
     document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.getElementById('tab-' + name).classList.add('active');
-    btn.classList.add('active');
+    
+    // Si la llamada no viene de pulsar un botón físico (ej: redirección inicial)
+    if(btn) {
+        btn.classList.add('active');
+    } else {
+        // Buscar el botón correspondiente por texto/id
+        if(name === 'analisis') document.querySelectorAll('.tab-btn')[0].classList.add('active');
+        if(name === 'reservas') document.querySelectorAll('.tab-btn')[1].classList.add('active');
+        if(name === 'simuladas') document.getElementById('tab-btn-simuladas').classList.add('active');
+    }
 }
 </script>
 
 {% if analytics and analytics.por_mes %}
 <script>
-/* ══ Dashboard reactivo a la fecha de corte (pasado real / futuro predicho) ══ */
+/* ══ Dashboard reactivo a la fecha de corte ══ */
 let DASH_MESES = [];
 let chartMeses = null, chartIngresos = null, _drillChart = null;
 let _dashCorte = "{{ fecha_corte }}";
 const COL = { activas:'#27ae60', canceladas:'#e74c3c', alto:'#c0392b', medio:'#f39c12', bajo:'#7dcea0' };
 const _fmt = n => '$' + Math.round(n || 0).toLocaleString('es-ES');
 
-/* Cambio de fecha desde el dashboard → sincroniza con Histórico */
 function cambiarCorteDash() {
     _dashCorte = document.getElementById('dash-corte-input').value;
     const hi = document.getElementById('fecha-corte-input');
     if (hi) {
         hi.value = _dashCorte;
-        if (typeof FECHA_CORTE_VAL !== 'undefined') { FECHA_CORTE_VAL = _dashCorte; }
-        if (typeof renderizarTablas === 'function') renderizarTablas();
+        FECHA_CORTE_VAL = _dashCorte;
+        renderizarTablas();
     }
     cargarDashboard(_dashCorte);
 }
 
-/* Carga los datos agregados del dashboard para una fecha de corte */
 function cargarDashboard(corte) {
     fetch('/api/dashboard?corte=' + encodeURIComponent(corte))
         .then(r => r.json())
@@ -882,7 +874,6 @@ function mostrarDrillMes(idx) {
     document.getElementById('drill-card').scrollIntoView({ behavior:'smooth', block:'nearest' });
 }
 
-/* Detalle de un hotel concreto (completadas + futuras) al pulsar su fila */
 function mostrarDetalleHotel(mesIdx, hotelIdx) {
     const d = DASH_MESES[mesIdx];
     if (!d || !d.hoteles) return;
@@ -915,7 +906,6 @@ function mostrarDetalleHotel(mesIdx, hotelIdx) {
 }
 function cerrarHotelModal() { document.getElementById('hotel-modal').style.display = 'none'; }
 
-/* Carga inicial del dashboard */
 cargarDashboard(_dashCorte);
 </script>
 {% endif %}
@@ -982,7 +972,6 @@ function riesgoColors(prob, seg) {
 function aplicarFechaCorte() {
     FECHA_CORTE_VAL = document.getElementById('fecha-corte-input').value;
     renderizarTablas();
-    // Sincronizar el dashboard (fecha de corte compartida)
     const di = document.getElementById('dash-corte-input');
     if (di) { di.value = FECHA_CORTE_VAL; }
     if (typeof cargarDashboard === 'function') cargarDashboard(FECHA_CORTE_VAL);
@@ -1107,7 +1096,6 @@ function resetFilters() {
     applyFilters();
 }
 
-// Inicializar
 renderizarTablas();
 switchSubTab('pasadas');
 
@@ -1118,17 +1106,14 @@ function openPanel(idx) {
     const r = RESERVAS[idx];
     if (!r) return;
 
-    // Resaltar fila
     if (activeRow) activeRow.classList.remove('selected-row');
     activeRow = document.querySelector(`tr[data-idx="${idx}"]`);
     if (activeRow) activeRow.classList.add('selected-row');
 
-    // Header
     document.getElementById('p-hotel').textContent = r.hotel_nom;
     document.getElementById('p-sub').textContent =
         'Segmento ' + r.segmento + ' · ID ' + r.id_reserva;
 
-    // Gauge
     const prob = r.prob_pred;
     const arc  = document.getElementById('gauge-arc');
     const num  = document.getElementById('gauge-num');
@@ -1138,7 +1123,10 @@ function openPanel(idx) {
     if (prob !== null && prob !== undefined) {
         const offset = arcLen - (prob / 100) * arcLen;
         arc.setAttribute('stroke-dashoffset', offset);
-        const color = prob > 65 ? '#e74c3c' : prob > 35 ? '#f39c12' : '#27ae60';
+        
+        // CORRECCIÓN: El color depende estrictamente de la clasificación de riesgo de Python
+        const color = r.riesgo_pred === 'ALTO' ? '#e74c3c' : (r.riesgo_pred === 'MEDIO' ? '#f39c12' : '#27ae60');
+        
         arc.setAttribute('stroke', color);
         num.textContent = prob.toFixed(1) + '%';
         num.setAttribute('fill', color);
@@ -1155,15 +1143,12 @@ function openPanel(idx) {
         badge.style.color = '#999';
     }
 
-    // Veredicto — el estado real SOLO se muestra en reservas pasadas.
-    // En futuras el resultado es desconocido: solo se muestra la predicción.
     const esFutura   = r.llegada && r.llegada > FECHA_CORTE_VAL;
     const predCancel = prob !== null ? prob > 50 : null;
 
     document.getElementById('v-real').style.display    = esFutura ? 'none' : '';
     document.getElementById('v-acierto').style.display = esFutura ? 'none' : '';
 
-    // Predicción del modelo (se muestra siempre)
     if (predCancel !== null) {
         document.getElementById('p-pred-val').textContent  = predCancel ? 'CANCELACIÓN' : 'ACTIVA';
         document.getElementById('p-pred-val').style.color  = predCancel ? '#c0392b' : '#27ae60';
@@ -1173,7 +1158,6 @@ function openPanel(idx) {
     }
 
     if (!esFutura) {
-        // Pasada: mostrar estado real y si el modelo acertó
         const esCancelada = r.cancelada;
         document.getElementById('p-estado-real').textContent = esCancelada ? 'CANCELADA' : 'ACTIVA';
         document.getElementById('v-real').style.background   = esCancelada ? '#fff5f5' : '#f5fff8';
@@ -1188,7 +1172,6 @@ function openPanel(idx) {
         }
     }
 
-    // Info grid
     document.getElementById('p-id').textContent        = r.id_reserva || '—';
     document.getElementById('p-llegada').textContent   = r.llegada || '—';
     document.getElementById('p-tipo').textContent      = r.tipo ? r.tipo.substring(0,30) : '—';
@@ -1200,7 +1183,6 @@ function openPanel(idx) {
     document.getElementById('p-fuente').textContent    = r.fuente || '—';
     document.getElementById('p-temporada').textContent = r.temporada || '—';
 
-    // Factores explicativos
     const factoresList = document.getElementById('factors-list');
     factoresList.innerHTML = '';
     const factores = r.explicacion || [];
@@ -1222,7 +1204,6 @@ function openPanel(idx) {
         factoresList.innerHTML = '<p style="color:#bbb;font-size:12px;">Sin factores disponibles.</p>';
     }
 
-    // Etiqueta del método (SHAP real del modelo vs reglas de negocio)
     const metodo = r.metodo_exp || (factores[0] && factores[0].metodo) || 'reglas';
     const badgeM = document.getElementById('p-metodo-badge');
     const footM  = document.getElementById('p-factors-footnote');
@@ -1239,13 +1220,11 @@ function openPanel(idx) {
             + 'mediante reglas de negocio basadas en el conocimiento del sector hotelero (no salen del modelo).';
     }
 
-    // Info del modelo
     const si = SEGMENTOS_INFO[r.segmento] || {};
     document.getElementById('p-seg-label').textContent = r.segmento;
     document.getElementById('p-algo').textContent      = si.algoritmo || '—';
     document.getElementById('p-auc').textContent       = si.auc_roc   || '—';
 
-    // Abrir panel
     document.getElementById('overlay').classList.add('open');
     document.getElementById('side-panel').classList.add('open');
 }
