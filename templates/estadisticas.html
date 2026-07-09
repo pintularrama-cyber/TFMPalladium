@@ -375,49 +375,216 @@ tr.row-activa    { background:#f7fdf9 !important; }
 
 <!-- ── Gráficos de analytics (reservas + ingresos por mes) ── -->
 {% if analytics and analytics.por_mes %}
-<div class="corte-card" style="margin-bottom:16px;">
-    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:200px;">
-            <div style="font-size:12px;font-weight:700;color:#2c3e50;text-transform:uppercase;letter-spacing:.5px;">Fecha de corte</div>
-            <div style="font-size:11px;color:#7f8c8d;">Antes = resultado real (activas/canceladas) · Después = predicción por riesgo</div>
-        </div>
-        <input type="date" id="dash-corte-input" value="{{ fecha_corte }}"
-               onchange="cambiarCorteDash()"
-               style="padding:8px 12px;border:1.5px solid #3498db;border-radius:6px;font-size:14px;font-weight:700;color:#2c3e50;cursor:pointer;">
-    </div>
-</div>
-<div class="analytics-grid">
-    <div class="chart-card">
-        <h4>Reservas por mes</h4>
-        <p class="chart-sub">Pasadas (activas/canceladas) y futuras (riesgo alto/medio/bajo). Clic en una barra para el desglose.</p>
-        <div style="position:relative;height:300px;">
-            <canvas id="chart-meses"></canvas>
-        </div>
-    </div>
-    <div class="chart-card">
-        <h4>Ingresos por mes (USD)</h4>
-        <p class="chart-sub">Ganados (activas) · Perdidos (canceladas) · En riesgo (futuras por nivel)</p>
-        <div style="position:relative;height:300px;">
-            <canvas id="chart-ingresos"></canvas>
-        </div>
-    </div>
-</div>
+<script>
+/* ══ Dashboard reactivo a la fecha de corte con Línea de Corte Vertical (Dashed) ══ */
+let DASH_MESES = [];
+let chartMeses = null, chartIngresos = null, _drillChart = null;
+let _dashCorte = "{{ fecha_corte }}";
+const COL = { activas:'#27ae60', canceladas:'#e74c3c', alto:'#c0392b', medio:'#f39c12', bajo:'#7dcea0' };
+const _fmt = n => '$' + Math.round(n || 0).toLocaleString('es-ES');
 
-<!-- Drill-down: detalle del mes seleccionado -->
-<div class="drill-card" id="drill-card">
-    <h4 id="drill-titulo">Detalle — mes seleccionado</h4>
-    <p class="drill-sub" id="drill-sub"></p>
-    <div class="hotel-bars" id="hotel-bars"></div>
-</div>
+// ── PLUGIN DE CHART.JS PARA DIBUJAR LA LÍNEA VERTICAL DE CORTE ──
+const verticalLinePlugin = {
+    id: 'verticalLine',
+    afterDraw: (chart) => {
+        if (!chart.scales.x) return;
+        
+        // Obtener el mes de corte actual (formato YYYY-MM)
+        const corteMonth = _dashCorte.substring(0, 7);
+        const index = chart.data.labels.indexOf(corteMonth);
+        if (index === -1) return;
 
-<!-- Modal: detalle de un hotel concreto -->
-<div id="hotel-modal" onclick="if(event.target===this)cerrarHotelModal()"
-     style="display:none;position:fixed;inset:0;background:rgba(15,12,41,.5);z-index:600;align-items:center;justify-content:center;padding:20px;">
-    <div style="background:#fff;border-radius:16px;max-width:480px;width:100%;max-height:90vh;overflow-y:auto;padding:24px;position:relative;box-shadow:0 30px 80px rgba(0,0,0,.3);">
-        <button onclick="cerrarHotelModal()" style="position:absolute;top:14px;right:16px;background:#f5f6fa;border:none;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:16px;color:#555;">×</button>
-        <div id="hotel-modal-content"></div>
-    </div>
-</div>
+        // Calcular la coordenada X del píxel para esa columna del mes
+        const x = chart.scales.x.getPixelForValue(corteMonth);
+        const ctx = chart.ctx;
+        const topY = chart.scales.y.top;
+        const bottomY = chart.scales.y.bottom;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.strokeStyle = '#2c3e50'; // Color gris azulado oscuro acorde al tema
+        ctx.lineWidth = 1.8;
+        ctx.setLineDash([5, 4]); // Línea discontinua: 5px pintados, 4px vacíos
+        ctx.moveTo(x, topY);
+        ctx.lineTo(x, bottomY);
+        ctx.stroke();
+
+        // Dibujar etiqueta de texto indicadora arriba de la línea
+        ctx.fillStyle = '#2c3e50';
+        ctx.font = 'bold 9px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('CORTE', x, topY - 6);
+        ctx.restore();
+    }
+};
+
+/* Cambio de fecha desde el dashboard → sincroniza con Histórico */
+function cambiarCorteDash() {
+    _dashCorte = document.getElementById('dash-corte-input').value;
+    const hi = document.getElementById('fecha-corte-input');
+    if (hi) {
+        hi.value = _dashCorte;
+        if (typeof FECHA_CORTE_VAL !== 'undefined') { FECHA_CORTE_VAL = _dashCorte; }
+        if (typeof renderizarTablas === 'function') renderizarTablas();
+    }
+    cargarDashboard(_dashCorte);
+}
+
+/* Carga los datos agregados del dashboard para una fecha de corte */
+function cargarDashboard(corte) {
+    fetch('/api/dashboard?corte=' + encodeURIComponent(corte))
+        .then(r => r.json())
+        .then(d => { DASH_MESES = d.meses || []; renderDashCharts();
+                     document.getElementById('drill-card').style.display = 'none'; })
+        .catch(() => {});
+}
+
+function renderDashCharts() {
+    const labels = DASH_MESES.map(m => m.mes);
+    const opts = (money) => ({
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{position:'top', labels:{font:{size:10}, boxWidth:12}},
+            tooltip: money ? {callbacks:{label:ctx=>' '+ctx.dataset.label+': '+_fmt(ctx.raw)}} : {} },
+        scales:{ x:{stacked:true, grid:{display:false}, ticks:{font:{size:9}}},
+                 y:{stacked:true, grid:{color:'#f0f0f0'}, ticks:{font:{size:10},
+                    callback: money ? (v=> v>=1e6?(v/1e6).toFixed(1)+'M':v>=1e3?(v/1e3).toFixed(0)+'k':v) : undefined}} },
+        onClick(e, els){ if (els.length) mostrarDrillMes(els[0].index); }
+    });
+
+    if (chartMeses) chartMeses.destroy();
+    chartMeses = new Chart(document.getElementById('chart-meses'), {
+        type:'bar',
+        data:{ labels, datasets:[
+            {label:'Activas (real)',    data:DASH_MESES.map(m=>m.pas_activas),    backgroundColor:COL.activas,    stack:'pasado'},
+            {label:'Canceladas (real)', data:DASH_MESES.map(m=>m.pas_canceladas), backgroundColor:COL.canceladas, stack:'pasado'},
+            {label:'Fut. bajo',  data:DASH_MESES.map(m=>m.fut_bajo),  backgroundColor:COL.bajo,  stack:'futuro'},
+            {label:'Fut. medio', data:DASH_MESES.map(m=>m.fut_medio), backgroundColor:COL.medio, stack:'futuro'},
+            {label:'Fut. alto',  data:DASH_MESES.map(m=>m.fut_alto),  backgroundColor:COL.alto,  stack:'futuro'},
+        ]}, 
+        options: opts(false),
+        plugins: [verticalLinePlugin] // Se registra el plugin dinámico
+    });
+
+    if (chartIngresos) chartIngresos.destroy();
+    chartIngresos = new Chart(document.getElementById('chart-ingresos'), {
+        type:'bar',
+        data:{ labels, datasets:[
+            {label:'Ganados',  data:DASH_MESES.map(m=>m.ing_ganados),  backgroundColor:COL.activas,    stack:'pasado'},
+            {label:'Perdidos', data:DASH_MESES.map(m=>m.ing_perdidos), backgroundColor:COL.canceladas, stack:'pasado'},
+            {label:'Riesgo bajo',  data:DASH_MESES.map(m=>m.ing_bajo),  backgroundColor:COL.bajo,  stack:'futuro'},
+            {label:'Riesgo medio', data:DASH_MESES.map(m=>m.ing_medio), backgroundColor:COL.medio, stack:'futuro'},
+            {label:'Riesgo alto',  data:DASH_MESES.map(m=>m.ing_alto),  backgroundColor:COL.alto,  stack:'futuro'},
+        ]}, 
+        options: opts(true),
+        plugins: [verticalLinePlugin] // Se registra el plugin dinámico
+    });
+}
+
+function mostrarDrillMes(idx) {
+    const d = DASH_MESES[idx];
+    if (!d) return;
+    const pas = d.pas_activas + d.pas_canceladas;
+    const fut = d.fut_alto + d.fut_medio + d.fut_bajo;
+    document.getElementById('drill-titulo').textContent = 'Detalle — ' + d.mes;
+    document.getElementById('drill-sub').textContent = pas + ' pasadas (resultado real) · ' + fut + ' futuras (predicción)';
+    if (_drillChart) { _drillChart.destroy(); _drillChart = null; }
+
+    const tasaPas = pas ? ((d.pas_canceladas/pas)*100).toFixed(0) : '0';
+    const htmlPasado = pas ? `
+        <div style="flex:1;min-width:280px;background:#fff;border:1px solid #eef2f5;border-radius:12px;padding:16px;">
+            <div style="font-size:12px;font-weight:700;color:#2c3e50;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">📅 Pasadas — resultado real</div>
+            <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+                <canvas id="drill-donut" width="140" height="140"></canvas>
+                <div style="flex:1;min-width:150px;display:grid;gap:8px;">
+                    <div style="background:#e9f7ef;border-radius:8px;padding:10px;"><b style="color:#27ae60;font-size:18px;">${d.pas_activas}</b> <span style="font-size:11px;color:#7f8c8d;">activas · ${_fmt(d.ing_ganados)} ganados</span></div>
+                    <div style="background:#fdecea;border-radius:8px;padding:10px;"><b style="color:#e74c3c;font-size:18px;">${d.pas_canceladas}</b> <span style="font-size:11px;color:#7f8c8d;">canceladas (${tasaPas}%) · ${_fmt(d.ing_perdidos)} perdidos</span></div>
+                </div>
+            </div>
+        </div>` : '';
+
+    const htmlFuturo = fut ? `
+        <div style="flex:1;min-width:280px;background:#fff;border:1px solid #eef2f5;border-radius:12px;padding:16px;">
+            <div style="font-size:12px;font-weight:700;color:#2c3e50;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">⏳ Futuras — predicción por riesgo</div>
+            <div style="display:grid;gap:8px;">
+                <div style="background:#fdecea;border-radius:8px;padding:10px;border-left:4px solid ${COL.alto};"><b style="color:${COL.alto};font-size:18px;">${d.fut_alto}</b> <span style="font-size:11px;color:#7f8c8d;">riesgo alto · ${_fmt(d.ing_alto)} en riesgo</span></div>
+                <div style="background:#fef5e7;border-radius:8px;padding:10px;border-left:4px solid ${COL.medio};"><b style="color:${COL.medio};font-size:18px;">${d.fut_medio}</b> <span style="font-size:11px;color:#7f8c8d;">riesgo medio · ${_fmt(d.ing_medio)}</span></div>
+                <div style="background:#eafaf1;border-radius:8px;padding:10px;border-left:4px solid ${COL.bajo};"><b style="color:#27ae60;font-size:18px;">${d.fut_bajo}</b> <span style="font-size:11px;color:#7f8c8d;">riesgo bajo · ${_fmt(d.ing_bajo)}</span></div>
+            </div>
+        </div>` : '';
+
+    const hotelRows = (d.hoteles || []).map((h, i) => `<tr onclick="mostrarDetalleHotel(${idx}, ${i})" style="cursor:pointer;transition:background .1s;" onmouseover="this.style.background='#eaf3ff'" onmouseout="this.style.background=''">
+        <td style="font-size:12px;font-weight:600;color:#2980b9;padding:7px 8px;white-space:nowrap;max-width:170px;overflow:hidden;text-overflow:ellipsis;" title="Ver detalle de ${h.hotel}">${h.hotel} ›</td>
+        <td style="font-size:12px;color:#27ae60;padding:7px 8px;text-align:right;">${h.pas_activas}</td>
+        <td style="font-size:12px;color:#e74c3c;padding:7px 8px;text-align:right;">${h.pas_canceladas}</td>
+        <td style="font-size:12px;padding:7px 8px;text-align:right;white-space:nowrap;"><span style="color:${COL.alto};">${h.fut_alto}</span> / <span style="color:${COL.medio};">${h.fut_medio}</span> / <span style="color:#27ae60;">${h.fut_bajo}</span></td>
+        <td style="font-size:12px;color:#27ae60;padding:7px 8px;text-align:right;">${_fmt(h.ing_ganados)}</td>
+        <td style="font-size:12px;color:#e74c3c;padding:7px 8px;text-align:right;">${_fmt(h.ing_perdidos)}</td>
+    </tr>`).join('');
+
+    document.getElementById('hotel-bars').innerHTML = `
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:18px;">${htmlPasado}${htmlFuturo}</div>
+        <div style="font-size:12px;font-weight:700;color:#7f8c8d;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;">Desglose por hotel</div>
+        <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;">
+            <thead><tr style="background:#f8f9fa;">
+                <th style="font-size:11px;color:#95a5a6;font-weight:600;padding:6px 8px;text-align:left;border-bottom:1px solid #ecf0f1;">Hotel</th>
+                <th style="font-size:11px;color:#95a5a6;font-weight:600;padding:6px 8px;text-align:right;border-bottom:1px solid #ecf0f1;">Activas</th>
+                <th style="font-size:11px;color:#95a5a6;font-weight:600;padding:6px 8px;text-align:right;border-bottom:1px solid #ecf0f1;">Cancel.</th>
+                <th style="font-size:11px;color:#95a5a6;font-weight:600;padding:6px 8px;text-align:right;border-bottom:1px solid #ecf0f1;" title="alto / medio / bajo">Fut. A/M/B</th>
+                <th style="font-size:11px;color:#95a5a6;font-weight:600;padding:6px 8px;text-align:right;border-bottom:1px solid #ecf0f1;">Ganados</th>
+                <th style="font-size:11px;color:#95a5a6;font-weight:600;padding:6px 8px;text-align:right;border-bottom:1px solid #ecf0f1;">Perdidos</th>
+            </tr></thead>
+            <tbody>${hotelRows}</tbody>
+        </table></div>`;
+
+    if (pas) {
+        _drillChart = new Chart(document.getElementById('drill-donut').getContext('2d'), {
+            type:'doughnut',
+            data:{ labels:['Activas','Canceladas'], datasets:[{ data:[d.pas_activas, d.pas_canceladas],
+                backgroundColor:[COL.activas, COL.canceladas], borderWidth:2, hoverOffset:5 }] },
+            options:{ responsive:false, cutout:'60%',
+                plugins:{ legend:{position:'bottom', labels:{font:{size:10}, padding:8}} } }
+        });
+    }
+
+    document.getElementById('drill-card').style.display = 'block';
+    document.getElementById('drill-card').scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+function mostrarDetalleHotel(mesIdx, hotelIdx) {
+    const d = DASH_MESES[mesIdx];
+    if (!d || !d.hoteles) return;
+    const h = d.hoteles[hotelIdx];
+    if (!h) return;
+    const pas = h.pas_activas + h.pas_canceladas;
+    const fut = h.fut_alto + h.fut_medio + h.fut_bajo;
+    const tasaPas = pas ? ((h.pas_canceladas/pas)*100).toFixed(0) : '0';
+    document.getElementById('hotel-modal-content').innerHTML = `
+        <h3 style="font-size:18px;color:#2c3e50;margin:0 0 2px;">${h.hotel}</h3>
+        <p style="font-size:12px;color:#7f8c8d;margin:0 0 16px;">Mes ${d.mes} · ${pas} completadas · ${fut} futuras</p>
+        <div style="display:grid;gap:14px;">
+            <div style="background:#f8fbff;border:1px solid #eef2f5;border-radius:12px;padding:16px;">
+                <div style="font-size:12px;font-weight:700;color:#2c3e50;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">📅 Reservas completadas (resultado real)</div>
+                <div style="display:grid;gap:8px;">
+                    <div style="background:#e9f7ef;border-radius:8px;padding:10px;"><b style="color:#27ae60;font-size:18px;">${h.pas_activas}</b> <span style="font-size:12px;color:#7f8c8d;">activas · ${_fmt(h.ing_ganados)} ganados</span></div>
+                    <div style="background:#fdecea;border-radius:8px;padding:10px;"><b style="color:#e74c3c;font-size:18px;">${h.pas_canceladas}</b> <span style="font-size:12px;color:#7f8c8d;">canceladas (${tasaPas}%) · ${_fmt(h.ing_perdidos)} perdidos</span></div>
+                </div>
+            </div>
+            <div style="background:#fffdf8;border:1px solid #eef2f5;border-radius:12px;padding:16px;">
+                <div style="font-size:12px;font-weight:700;color:#2c3e50;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">⏳ Reservas futuras (predicción por riesgo)</div>
+                <div style="display:grid;gap:8px;">
+                    <div style="background:#fdecea;border-radius:8px;padding:10px;border-left:4px solid ${COL.alto};"><b style="color:${COL.alto};font-size:18px;">${h.fut_alto}</b> <span style="font-size:12px;color:#7f8c8d;">riesgo alto · ${_fmt(h.ing_alto)} en riesgo</span></div>
+                    <div style="background:#fef5e7;border-radius:8px;padding:10px;border-left:4px solid ${COL.medio};"><b style="color:${COL.medio};font-size:18px;">${h.fut_medio}</b> <span style="font-size:11px;color:#7f8c8d;">riesgo medio · ${_fmt(h.ing_medio)}</span></div>
+                    <div style="background:#eafaf1;border-radius:8px;padding:10px;border-left:4px solid ${COL.bajo};"><b style="color:#27ae60;font-size:18px;">${h.fut_bajo}</b> <span style="font-size:12px;color:#7f8c8d;">riesgo bajo · ${_fmt(h.ing_bajo)}</span></div>
+                </div>
+            </div>
+        </div>`;
+    document.getElementById('hotel-modal').style.display = 'flex';
+}
+function cerrarHotelModal() { document.getElementById('hotel-modal').style.display = 'none'; }
+
+cargarDashboard(_dashCorte);
+</script>
 {% endif %}
 
 </div><!-- /tab-analisis -->
