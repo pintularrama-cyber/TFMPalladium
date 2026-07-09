@@ -278,11 +278,12 @@ def cargar_datos():
         'MEDIANO': 'df_mediano.csv',
         'GRANDE': 'df_grande.csv'
     }
+    # LIMITACIÓN DE MEMORIA: Leemos un máximo de 15.000 filas de cada CSV para no saturar la RAM de Render.
     for segmento, archivo in archivos.items():
         ruta = os.path.join(RUTA_ENTRENAMIENTO, archivo)
         if os.path.exists(ruta):
             try:
-                DATOS[segmento] = pd.read_csv(ruta, low_memory=False)
+                DATOS[segmento] = pd.read_csv(ruta, nrows=15000, low_memory=False)
             except Exception as e:
                 print(f"ERROR leyendo {archivo}: {e}")
         else:
@@ -494,45 +495,66 @@ def cargar_datos_originales():
 
         import numpy as np
 
-        def _predecir(modelo, features_dict):
-            clf = modelo.named_steps['modelo']
-            X20 = np.array([[float(features_dict.get(c, 0.0)) for c in COLUMNAS_PIPELINE]],
-                           dtype=np.float64)
-            return clf.predict_proba(X20)
-
-        predicciones_activas = False
-        try:
-            modelo_test, _ = obtener_modelo_y_explainer('MEDIANO')
-            _predecir(modelo_test, {c: 0.0 for c in COLUMNAS_PIPELINE})
-            predicciones_activas = True
-            print("OK: predict_proba verificado de manera dinámica")
-        except Exception as e_test:
-            print(f"AVISO: predict_proba no disponible — {e_test}")
-
-        registros = []
+        # 1. Transformamos primero todas las filas
+        transformed_rows = []
         for _, row in muestra.iterrows():
             try:
                 features, meta = _transformar_fila(row)
+                transformed_rows.append({'row': row, 'features': features, 'meta': meta})
             except Exception:
                 continue
 
-            prob = None
-            riesgo = None
-            if predicciones_activas:
-                try:
-                    seg_key = meta['segmento']
-                    modelo_dyn, _ = obtener_modelo_y_explainer(seg_key)
-                    prob_arr = _predecir(modelo_dyn, features)
-                    prob = round(float(prob_arr[0][1]) * 100, 1)
-                    riesgo = calcular_riesgo(prob, seg_key)
-                except Exception:
-                    pass
+        # 2. Agrupamos los índices por segmento para hacer predicción por lotes (Batch Prediction)
+        # Esto evita cargar y borrar modelos de la RAM 300 veces consecutivas.
+        idx_por_seg = {seg: [] for seg in SEGMENTOS.keys()}
+        for i, item in enumerate(transformed_rows):
+            seg = item['meta']['segmento']
+            if seg in idx_por_seg:
+                idx_por_seg[seg].append(i)
+
+        # 3. Predecimos en un solo lote por cada segmento
+        probs_predichas = [None] * len(transformed_rows)
+        for seg, indices in idx_por_seg.items():
+            if not indices:
+                continue
+            try:
+                modelo_dyn, _ = obtener_modelo_y_explainer(seg)
+                clf = modelo_dyn.named_steps['modelo']
+                
+                # Construimos la matriz del lote
+                X_batch = []
+                for idx in indices:
+                    feats = transformed_rows[idx]['features']
+                    X_batch.append([float(feats.get(c, 0.0)) for c in COLUMNAS_PIPELINE])
+                    
+                X_arr = np.array(X_batch, dtype=np.float64)
+                probs = clf.predict_proba(X_arr)[:, 1]
+                
+                for j, idx in enumerate(indices):
+                    probs_predichas[idx] = round(float(probs[j]) * 100, 1)
+            except Exception as e:
+                print(f"AVISO: fallo prediccion lote datos originales para {seg}: {e}")
+
+        # 4. Construimos los registros finales.
+        # OPTIMIZACIÓN DE MEMORIA: Los registros iniciales usan explicación de reglas de negocio
+        # para no saturar la RAM ejecutando SHAP 300 veces al arrancar.
+        registros = []
+        for i, item in enumerate(transformed_rows):
+            row = item['row']
+            features = item['features']
+            meta = item['meta']
+            prob = probs_predichas[i]
+            riesgo = calcular_riesgo(prob, meta['segmento']) if prob is not None else None
 
             status_val = int(row.get('STATUS', 0) or 0)
             cancelada  = bool(MAPA_STATUS.get(status_val, 0))
             hotel_id   = int(row.get('ID_HOTEL', 0))
             hotel_nom  = HOTEL_NOMBRES.get(hotel_id, f'Hotel {hotel_id}')
-            explicacion = generar_explicacion(features, meta, meta['segmento'])
+            
+            # Usar reglas de negocio (rápido y usa 0 MB de RAM)
+            explicacion = _generar_explicacion(features, meta)
+            for f in explicacion:
+                f['metodo'] = 'reglas'
 
             registros.append({
                 'id_reserva':  str(row.get('ID_RESERVA', '')),
@@ -558,13 +580,14 @@ def cargar_datos_originales():
                 'prob_pred':   prob,
                 'riesgo_pred': riesgo,
                 'explicacion': explicacion,
-                'metodo_exp':  (explicacion[0]['metodo'] if explicacion else 'reglas'),
+                'metodo_exp':  'reglas',
                 '_features':   features,
             })
 
         DATOS_ORIG = registros
         preds_ok = sum(1 for r in registros if r['prob_pred'] is not None)
         print(f"OK: {len(DATOS_ORIG)} reservas cargadas ({preds_ok} con predicción)")
+        
         global FECHA_CORTE
         fechas = sorted([r['llegada'] for r in registros if r.get('llegada') and len(r.get('llegada', '')) >= 7])
         FECHA_CORTE = fechas[len(fechas) // 2] if fechas else '2023-01-01'
