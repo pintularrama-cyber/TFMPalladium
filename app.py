@@ -15,15 +15,20 @@ app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
 # ==========================================
-# CARGAR MODELOS BAJO DEMANDA (OPTIMIZADO)
+# CONFIGURACIÓN DE MODELOS Y ESTADÍSTICAS EN MEMORIA
 # ==========================================
 
 MODELOS = {}
 EXPLAINERS = {}   # SHAP TreeExplainer por segmento (se rellena si SHAP está disponible)
 SHAP_OK = False   # True si al menos un explainer SHAP se creó correctamente
-DATOS = {}
 DATOS_ORIG = []
-DF_COMPLETO = None  # 10 000 filas del CSV para analytics
+DF_COMPLETO = None  # Filas del CSV para analytics
+
+# OPTIMIZACIÓN: Almacenes ligeros para evitar mantener DataFrames gigantes en RAM
+ESTADISTICAS_TOTALES = None
+ESTADISTICAS_POR_SEGMENTO = {}
+MUESTRA_RESERVAS = []
+
 DASHBOARD_RESERVAS = []  # todas las reservas del dashboard con predicción de riesgo
 RESERVAS_SIMULADAS = []  # historial de simulaciones guardadas por usuario
 FECHA_CORTE = '2023-01-01'
@@ -273,21 +278,89 @@ def generar_explicacion(features, meta, segmento):
 
 
 def cargar_datos():
+    """
+    Lee los archivos de entrenamiento, calcula las métricas estadísticas globales,
+    genera una muestra de tabla ligera y libera inmediatamente la memoria RAM borrando los DataFrames.
+    """
+    global ESTADISTICAS_TOTALES, ESTADISTICAS_POR_SEGMENTO, MUESTRA_RESERVAS
+    
     archivos = {
         'PEQUEÑO': 'df_pequeno.csv',
         'MEDIANO': 'df_mediano.csv',
         'GRANDE': 'df_grande.csv'
     }
-    # LIMITACIÓN DE MEMORIA: Leemos un máximo de 15.000 filas de cada CSV para no saturar la RAM de Render.
+    
+    temp_datos = {}
     for segmento, archivo in archivos.items():
         ruta = os.path.join(RUTA_ENTRENAMIENTO, archivo)
         if os.path.exists(ruta):
             try:
-                DATOS[segmento] = pd.read_csv(ruta, nrows=15000, low_memory=False)
+                temp_datos[segmento] = pd.read_csv(ruta, low_memory=False)
             except Exception as e:
                 print(f"ERROR leyendo {archivo}: {e}")
         else:
-            print(f"AVISO: CSV no encontrado: {archivo}")
+            print(f"AVISO: CSV de entrenamiento no encontrado: {archivo}")
+
+    if not temp_datos:
+        print("AVISO: No se ha podido cargar ningún dataset para estadísticas.")
+        return
+
+    print("--- Precalculando estadísticas en arranque... ---")
+
+    # 1. Calcular totales globales de tarjetas
+    totales_reservas = sum(len(df) for df in temp_datos.values())
+    totales_canceladas = sum(int(df['STATUS_BOOL'].sum()) for df in temp_datos.values())
+    
+    ESTADISTICAS_TOTALES = {
+        'reservas': totales_reservas,
+        'canceladas': totales_canceladas,
+        'tasa': round(totales_canceladas / totales_reservas * 100, 2) if totales_reservas > 0 else 0
+    }
+
+    # 2. Calcular estadísticas por cada tarjeta de segmento
+    for seg, df in temp_datos.items():
+        ESTADISTICAS_POR_SEGMENTO[seg] = {
+            'total':      len(df),
+            'canceladas': int(df['STATUS_BOOL'].sum()),
+            'tasa':       round(float(df['STATUS_BOOL'].mean()) * 100, 2),
+            'algoritmo':  SEGMENTOS[seg]['algoritmo'],
+            'auc_roc':    SEGMENTOS[seg]['auc_roc'],
+        }
+
+    # 3. Extraer muestra aleatoria de 300 filas para rellenar la tabla del Análisis
+    def get_ohe(row, prefix, baseline):
+        for col in row.index:
+            if col.startswith(prefix) and float(row[col]) == 1.0:
+                return col[len(prefix):]
+        return baseline
+
+    SAMPLE = 300
+    MUESTRA_RESERVAS = []
+    for seg, df in temp_datos.items():
+        muestra = df.sample(min(SAMPLE, len(df)), random_state=42).reset_index(drop=True)
+        for _, row in muestra.iterrows():
+            cancelada = bool(row.get('STATUS_BOOL', False))
+            MUESTRA_RESERVAS.append({
+                'seg':        seg,
+                'adr':        round(float(row.get('ADR', 0)), 0),
+                'noches':     int(row.get('NOCHES', 0)),
+                'antelacion': int(row.get('ANTELACION_DIAS', 0)),
+                'fuente':     get_ohe(row, 'FUENTE_NEGOCIO_', 'Corporate'),
+                'temporada':  get_ohe(row, 'TEMPORADA_', 'Alta'),
+                'distancia':  get_ohe(row, 'DISTANCIA_', 'Corto'),
+                'pax_tipo':   get_ohe(row, 'PAX_TIPO_', 'Familias'),
+                'grupo':      'Grupo' if int(row.get('GRUPO_TIPO_COD', 0)) == 1 else 'Individual',
+                'cancelada':  cancelada,
+                'estado':     'CANCELADA' if cancelada else 'ACTIVA',
+                'prob_pred':  None,
+                'riesgo_pred': None,
+            })
+
+    # 4. ¡LA CLAVE DE LA OPTIMIZACIÓN!: Vaciamos por completo el diccionario y forzamos liberación de RAM
+    temp_datos.clear()
+    import gc
+    gc.collect()
+    print("OK: Estadísticas calculadas con éxito. Datasets de entrenamiento eliminados de la RAM.")
 
 
 def _parse_date(s):
@@ -484,9 +557,10 @@ def cargar_datos_originales():
                 'PAX', 'ADULTOS', 'NENES', 'BEBES', 'PAIS', 'FUENTE_NEGOCIO',
                 'TIPO', 'STATUS', 'ID_MULTIPLE', 'MONEDA', 'SEGMENTO',
                 'VALHAB', 'VALPEN', 'VALSERV', 'VALFIJOS']
-        df = pd.read_csv(ruta, sep=';', nrows=10000, usecols=cols,
+        # OPTIMIZACIÓN: Leemos solo 1.500 filas del archivo histórico para que consuma un 85% menos de RAM
+        df = pd.read_csv(ruta, sep=';', nrows=1500, usecols=cols,
                          on_bad_lines='skip', low_memory=False)
-        print(f"OK: CSV original leído ({len(df)} filas)")
+        print(f"OK: CSV original leído ({len(df)} filas para dashboard)")
         df['ID_HOTEL'] = pd.to_numeric(df['ID_HOTEL'], errors='coerce').fillna(0).astype(int)
         df = df[df['ID_HOTEL'].isin(HOTEL_SIZE_MAPPING.keys())]
         DF_COMPLETO = df
@@ -551,7 +625,6 @@ def cargar_datos_originales():
             hotel_id   = int(row.get('ID_HOTEL', 0))
             hotel_nom  = HOTEL_NOMBRES.get(hotel_id, f'Hotel {hotel_id}')
             
-            # Usar reglas de negocio (rápido y usa 0 MB de RAM)
             explicacion = _generar_explicacion(features, meta)
             for f in explicacion:
                 f['metodo'] = 'reglas'
@@ -971,7 +1044,8 @@ def estadisticas():
                     if r.get('usuario') == usuario or r.get('tipo') == 'cliente']
     sims_usuario = sorted(sims_usuario, key=lambda x: x.get('id',''), reverse=True)
 
-    if not DATOS:
+    # OPTIMIZACIÓN: Si no se han podido precalcular estadísticas iniciales
+    if ESTADISTICAS_TOTALES is None:
         return render_template('estadisticas.html', usuario=usuario,
                                totales=None, por_segmento={}, reservas=[],
                                datos_orig=datos_orig_full, segmentos_info=segmentos_info,
@@ -982,56 +1056,12 @@ def estadisticas():
                                umbrales_riesgo=UMBRALES_RIESGO,
                                shap_activo=SHAP_OK)
 
-    totales = {
-        'reservas':   sum(len(df) for df in DATOS.values()),
-        'canceladas': sum(int(df['STATUS_BOOL'].sum()) for df in DATOS.values()),
-    }
-    totales['tasa'] = round(totales['canceladas'] / totales['reservas'] * 100, 2)
-
-    por_segmento = {}
-    for seg, df in DATOS.items():
-        por_segmento[seg] = {
-            'total':      len(df),
-            'canceladas': int(df['STATUS_BOOL'].sum()),
-            'tasa':       round(float(df['STATUS_BOOL'].mean()) * 100, 2),
-            'algoritmo':  SEGMENTOS[seg]['algoritmo'],
-            'auc_roc':    SEGMENTOS[seg]['auc_roc'],
-        }
-
-    def get_ohe(row, prefix, baseline):
-        for col in row.index:
-            if col.startswith(prefix) and float(row[col]) == 1.0:
-                return col[len(prefix):]
-        return baseline
-
-    SAMPLE = 300
-    reservas = []
-    for seg, df in DATOS.items():
-        muestra = df.sample(min(SAMPLE, len(df)), random_state=42).reset_index(drop=True)
-
-        for i, row in muestra.iterrows():
-            cancelada = bool(row.get('STATUS_BOOL', False))
-            prob = None
-            riesgo_pred = None
-            reservas.append({
-                'seg':        seg,
-                'adr':        round(float(row.get('ADR', 0)), 0),
-                'noches':     int(row.get('NOCHES', 0)),
-                'antelacion': int(row.get('ANTELACION_DIAS', 0)),
-                'fuente':     get_ohe(row, 'FUENTE_NEGOCIO_', 'Corporate'),
-                'temporada':  get_ohe(row, 'TEMPORADA_', 'Alta'),
-                'distancia':  get_ohe(row, 'DISTANCIA_', 'Corto'),
-                'pax_tipo':   get_ohe(row, 'PAX_TIPO_', 'Familias'),
-                'grupo':      'Grupo' if int(row.get('GRUPO_TIPO_COD', 0)) == 1 else 'Individual',
-                'cancelada':  cancelada,
-                'estado':     'CANCELADA' if cancelada else 'ACTIVA',
-                'prob_pred':  prob,
-                'riesgo_pred': riesgo_pred,
-            })
-
+    # Devolvemos los datos precalculados ultraligeros
     return render_template('estadisticas.html', usuario=usuario,
-                           totales=totales, por_segmento=por_segmento,
-                           reservas=reservas, datos_orig=datos_orig_full,
+                           totales=ESTADISTICAS_TOTALES, 
+                           por_segmento=ESTADISTICAS_POR_SEGMENTO,
+                           reservas=MUESTRA_RESERVAS, 
+                           datos_orig=datos_orig_full,
                            segmentos_info=segmentos_info,
                            hoteles_disponibles=hoteles_disponibles,
                            analytics=analytics,
@@ -1105,7 +1135,7 @@ def api_predecir():
     temporada  = TEMPORADA_MESES.get(mes, 'ALTA')
     pais_agrup = MAPA_PAIS_AGRUPADO.get(pais_raw, 'Otros')
     distancia  = DISTANCIA_POR_PAIS.get(pais_agrup, 'No Info')
-    pax        = adultos + nenes
+    pax        = pretzels = adultos + nenes
     pax_tipo   = 'SINGLE' if pax == 1 else ('PAREJAS' if pax == 2 else 'FAMILIAS')
     segmento_sel = str(data.get('segmento_mkt', '') or '').strip()
     cod_pais     = _cod_pais(pais_agrup)
@@ -1214,14 +1244,16 @@ def api_dashboard():
 @app.route('/api/datos_segmento/<segmento>')
 @login_required
 def api_datos_segmento(segmento):
-    if segmento not in DATOS:
+    # Ya no mantenemos DATOS en memoria, pero para no romper el endpoint calculamos la respuesta 
+    # utilizando los valores estadísticos ya precalculados.
+    if segmento not in ESTADISTICAS_POR_SEGMENTO:
         return jsonify({'error': 'Datos no disponibles para este segmento'}), 404
 
-    df = DATOS[segmento]
+    stats = ESTADISTICAS_POR_SEGMENTO[segmento]
     return jsonify({
-        'total': len(df),
-        'canceladas': int(df['STATUS_BOOL'].sum()),
-        'tasa': round(df['STATUS_BOOL'].sum() / len(df) * 100, 2)
+        'total': stats['total'],
+        'canceladas': stats['canceladas'],
+        'tasa': stats['tasa']
     })
 
 # ==========================================
