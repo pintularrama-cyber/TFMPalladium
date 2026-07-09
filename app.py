@@ -39,7 +39,7 @@ def calcular_riesgo(prob, segmento):
 
 
 def cargar_modelos():
-    """Carga permanentemente todos los pipelines y sus explainers SHAP en memoria."""
+    """Carga permanentemente todos los pipelines y sus explainers SHAP en memoria (Máximo rendimiento)."""
     global SHAP_OK
     import sys
     import preprocesamiento as _prep
@@ -188,7 +188,7 @@ def _valor_legible(col, features):
 
 
 def _generar_explicacion_shap(features, segmento):
-    """Explicación basada en los valores SHAP reales del modelo entrenado."""
+    """Explicación matemática basada estrictamente en los valores SHAP."""
     import numpy as np
     explainer = EXPLAINERS[segmento]
     X20 = np.array([[float(features.get(c, 0.0)) for c in COLUMNAS_PIPELINE]], dtype=np.float64)
@@ -221,7 +221,6 @@ def _generar_explicacion_shap(features, segmento):
                 continue
         direccion = 'sube' if v > 0 else ('baja' if v < 0 else 'neutro')
         impacto = 'alto' if peso >= 0.5 else ('medio' if peso >= 0.2 else 'bajo')
-        sentido = ('aumenta' if v > 0 else 'reduce')
         factores.append({
             'factor': _NOMBRE_FEATURE.get(col, col),
             'valor': _valor_legible(col, features),
@@ -229,9 +228,7 @@ def _generar_explicacion_shap(features, segmento):
             'direccion': direccion,
             'shap': round(v, 4),
             'peso_pct': round(peso * 100),
-            'descripcion': f'Esta variable {sentido} la probabilidad de cancelación de esta reserva. '
-                           f'Aporta un {round(peso*100)}% del peso total de la predicción del modelo '
-                           f'(valor SHAP = {v:+.4f}).',
+            'descripcion': f'Valor SHAP = {v:+.4f}',  # Diseño minimalista matemático solicitado
             'metodo': 'shap',
         })
         if len(factores) >= 6:
@@ -792,7 +789,7 @@ def predecir_publico():
         'pax_tipo':     pax_tipo,
         'prob':         prob,
         'riesgo':       riesgo,
-        'explicacion':  _generar_explicacion_shap(features, segmento),  # SHAP Real e inmediato
+        'explicacion':  _generar_explicacion_shap(features, segmento),  # SHAP Real
     }
     RESERVAS_SIMULADAS.append(registro_pub)
     _guardar_reservas_simuladas()
