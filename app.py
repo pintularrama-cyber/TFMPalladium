@@ -38,6 +38,74 @@ def calcular_riesgo(prob, segmento):
     return 'BAJO'
 
 
+def obtener_pais_agrupado_y_distancia(pais_seleccionado, hotel_id):
+    """
+    Calcula de forma dinámica la distancia real para hoteles en América:
+    - Corto: Viajes nacionales (origen == país del hotel).
+    - Medio: Viajes continentales dentro de América (USA, Canadá, Sudamérica...).
+    - Largo: Viajes transatlánticos (Europa, Asia, etc.).
+    """
+    if not pais_seleccionado:
+        return 'Otros', 'Largo'
+        
+    import unicodedata
+    def normalizar(texto):
+        return "".join(
+            c for c in unicodedata.normalize('NFD', str(texto).strip().upper())
+            if unicodedata.category(c) != 'Mn'
+        ).replace('MEXICO', 'MEXICO').replace('ESPANA', 'ESPANA')
+        
+    pais_clean = normalizar(pais_seleccionado)
+    
+    # Mapeo del país donde está físicamente cada hotel ID
+    HOTEL_PAIS = {
+        6: 'MEXICO',      # Vallarta
+        9: 'DOMINICANA',  # Dominican Fiesta
+        83: 'BRASIL',     # Imbassai
+        92: 'JAMAICA',    # Jamaica
+        96: 'MEXICO',      # Costa Mujeres
+        99: 'DOMINICANA',  # Cap Cana
+        106: 'MEXICO',     # Riviera Maya
+        107: 'DOMINICANA'  # Punta Cana
+    }
+    pais_hotel = HOTEL_PAIS.get(int(hotel_id), 'MEXICO')
+    
+    # Países del continente americano para clasificar distancia Media
+    PAISES_AMERICA = {
+        'MEXICO', 'ESTADOS UNIDOS', 'USA', 'CANADA', 'ARGENTINA', 'BRASIL', 
+        'CHILE', 'COLOMBIA', 'PERU', 'URUGUAY', 'VENEZUELA', 'ECUADOR', 
+        'JAMAICA', 'REPUBLICA DOMINICANA', 'DOMINICANA', 'SIN PAIS'
+    }
+    
+    # 1. Obtener la agrupación histórica esperada por el encoder para el Target Encoding
+    pais_agrup = 'Otros'
+    for k, v in MAPA_PAIS_AGRUPADO.items():
+        if normalizar(k) == pais_clean:
+            pais_agrup = v
+            break
+
+    # 2. CLASIFICACIÓN DE DISTANCIA (Lógica América-céntrica):
+    
+    # Caso A: Vuelo nacional (Corto)
+    is_mexico = (pais_clean in ('MEXICO', 'MEX') and pais_hotel == 'MEXICO')
+    is_brasil = (pais_clean in ('BRASIL', 'BRA') and pais_hotel == 'BRASIL')
+    is_jamaica = (pais_clean in ('JAMAICA', 'JAM') and pais_hotel == 'JAMAICA')
+    is_dom = (pais_clean in ('DOMINICANA', 'REPUBLICA DOMINICANA', 'DOM') and pais_hotel == 'DOMINICANA')
+    
+    if is_mexico or is_brasil or is_jamaica or is_dom or (pais_clean == pais_hotel):
+        distancia = 'Corto'
+        
+    # Caso B: Continental Americano (Medio)
+    elif pais_clean in PAISES_AMERICA:
+        distancia = 'Medio'
+        
+    # Caso C: Transatlántico (Largo)
+    else:
+        distancia = 'Largo'
+        
+    return pais_agrup, distancia
+
+
 def cargar_modelos():
     """Carga permanentemente todos los pipelines y sus explainers SHAP en memoria (Máximo rendimiento)."""
     global SHAP_OK
@@ -307,9 +375,9 @@ def _transformar_fila(row):
     except Exception:
         temporada = 'ALTA'
 
-    pais_raw    = str(row.get('PAIS', '') or '').strip().upper()
-    pais_agrup  = MAPA_PAIS_AGRUPADO.get(pais_raw, 'Otros')
-    distancia   = DISTANCIA_POR_PAIS.get(pais_agrup, 'No Info')
+    pais_raw    = str(row.get('PAIS', '') or '').strip()
+    hotel_id    = int(row.get('ID_HOTEL', 0) or 0)
+    pais_agrup, distancia = obtener_pais_agrupado_y_distancia(pais_raw, hotel_id)
 
     pax = int(row.get('PAX', 2) or 2)
     pax_tipo = 'SINGLE' if pax == 1 else ('PAREJAS' if pax == 2 else 'FAMILIAS')
@@ -319,7 +387,6 @@ def _transformar_fila(row):
     except Exception:
         grupo_cod = 0
 
-    hotel_id = int(row.get('ID_HOTEL', 0) or 0)
     segmento  = HOTEL_SIZE_MAPPING.get(hotel_id, 'GRANDE')
 
     seg_mercado = str(row.get('SEGMENTO', '') or '').strip()
@@ -717,12 +784,12 @@ def predecir_publico():
     nenes    = int(data.get('nenes', 0) or 0)
     bebes    = int(data.get('bebes', 0) or 0)
     adultos  = int(data.get('adultos', 2) or 2)
-    pais_raw = str(data.get('pais', '') or '').strip().upper()
+    pais_raw = str(data.get('pais', '') or '').strip()
 
     mes       = llegada_dt.month if llegada_dt else 6
     temporada = TEMPORADA_MESES.get(mes, 'ALTA')
-    pais_agrup = MAPA_PAIS_AGRUPADO.get(pais_raw, 'Otros')
-    distancia  = DISTANCIA_POR_PAIS.get(pais_agrup, 'No Info')
+    pais_agrup, distancia = obtener_pais_agrupado_y_distancia(pais_raw, hotel_id)
+    
     pax        = adultos + nenes
     pax_tipo   = 'SINGLE' if pax == 1 else ('PAREJAS' if pax == 2 else 'FAMILIAS')
     cod_pais = _cod_pais(pais_agrup)
@@ -906,7 +973,14 @@ def nueva_reserva():
     usuario = session.get('usuario')
     hoteles = [{'id': hid, 'nombre': nom, 'segmento': HOTEL_SIZE_MAPPING.get(hid, 'GRANDE')}
                for hid, nom in sorted(HOTEL_NOMBRES.items(), key=lambda x: x[1])]
-    paises  = sorted(MAPA_PAIS_AGRUPADO.keys())
+               
+    # Deduplica y unifica la lista de países para el desplegable (México con acento)
+    paises_unicos = set()
+    for p in MAPA_PAIS_AGRUPADO.keys():
+        p_clean = p.strip().title()
+        if p_clean == "Mexico": p_clean = "México"
+        paises_unicos.add(p_clean)
+    paises = sorted(list(paises_unicos))
 
     adr_por_hotel = {}
     for r in DATOS_ORIG:
@@ -954,12 +1028,12 @@ def api_predecir():
     adultos   = int(data.get('adultos', 2) or 2)
     grupo_cod = 1 if data.get('es_grupo', False) else 0
     fuente    = 'E-COMMERCE'
-    pais_raw  = str(data.get('pais', '') or '').strip().upper()
+    pais_raw  = str(data.get('pais', '') or '').strip()
+
+    pais_agrup, distancia = obtener_pais_agrupado_y_distancia(pais_raw, hotel_id)
 
     mes        = llegada_dt.month if llegada_dt else 0
     temporada  = TEMPORADA_MESES.get(mes, 'ALTA')
-    pais_agrup = MAPA_PAIS_AGRUPADO.get(pais_raw, 'Otros')
-    distancia  = DISTANCIA_POR_PAIS.get(pais_agrup, 'No Info')
     pax        = adultos + nenes
     pax_tipo   = 'SINGLE' if pax == 1 else ('PAREJAS' if pax == 2 else 'FAMILIAS')
     segmento_sel = str(data.get('segmento_mkt', '') or '').strip()
