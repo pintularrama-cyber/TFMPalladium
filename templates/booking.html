@@ -130,6 +130,9 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f4f6f9;
 .footer-pub{background:#1a1a2e;color:rgba(255,255,255,.5);text-align:center;padding:28px 20px;font-size:12px;margin-top:60px;}
 .footer-pub strong{color:rgba(255,255,255,.8);}
 
+/* BANDERAS TWEMOJI (para que se vean también en Windows) */
+img.emoji{height:1em;width:auto;margin:0 .05em 0 .1em;vertical-align:-0.1em;display:inline-block;}
+
 /* RESPONSIVE */
 @media(max-width:768px){
     .hero h1{font-size:28px;}
@@ -192,6 +195,17 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f4f6f9;
             <div class="s-field" style="max-width:90px;">
                 <label>Niños</label>
                 <select id="s-ninos">
+                    <option value="0" selected>0</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                </select>
+            </div>
+            <div class="s-field" style="max-width:90px;">
+                <label>Bebés</label>
+                <select id="s-bebes">
                     <option value="0" selected>0</option>
                     <option value="1">1</option>
                     <option value="2">2</option>
@@ -386,9 +400,26 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f4f6f9;
 </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/twemoji.min.js" crossorigin="anonymous"></script>
 <script>
 // ── Datos hoteles ──
 const HOTELES = {{ hoteles | tojson }};
+
+// ── Banderas: convertir SOLO las banderas a imagen (Twemoji) para que se vean también en Windows.
+//    El resto de emojis se dejan nativos, idénticos en Mac. ──
+function parsearBanderas(nodo){
+    if (typeof twemoji === 'undefined') return; // sin conexión: se dejan los emojis nativos
+    twemoji.parse(nodo || document.body, {
+        callback: function(icon){
+            var first = parseInt(icon.split('-')[0], 16);
+            if (first >= 0x1F1E6 && first <= 0x1F1FF) { // regional indicators = banderas
+                return 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/' + icon + '.png';
+            }
+            return false; // cualquier otro emoji: no se toca
+        }
+    });
+}
+document.addEventListener('DOMContentLoaded', function(){ parsearBanderas(document.body); });
 let hotelActivo = null;
 let zonaActiva = 'todos';
 let textoActivo = '';
@@ -461,6 +492,7 @@ function abrirModal(hid) {
 
     document.getElementById('modal-nom').textContent = h.nom;
     document.getElementById('modal-loc').textContent = h.pais + '  ' + h.loc;
+    parsearBanderas(document.getElementById('modal-loc')); // bandera visible también en Windows
     document.getElementById('modal-img').style.background = h.grad;
     const mp = document.getElementById('modal-img-photo');
     mp.style.display = '';
@@ -474,7 +506,7 @@ function abrirModal(hid) {
     document.getElementById('m-checkout').value = co;
     document.getElementById('m-adultos').value  = document.getElementById('s-adultos').value;
     document.getElementById('m-ninos').value    = document.getElementById('s-ninos').value;
-    document.getElementById('m-bebes').value    = "0"; // Reiniciar selector de bebés al abrir
+    document.getElementById('m-bebes').value    = document.getElementById('s-bebes').value; // Hereda los bebés elegidos en la cabecera
 
     resetModal(false);
     calcModal();
