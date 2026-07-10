@@ -172,6 +172,99 @@
             font-size: 12px;
         }
         
+        /* CAPA DE ADVERTENCIA PARA MÓVILES (UX FALLBACK) */
+        #mobile-warning-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: linear-gradient(135deg, #2c3e50 0%, #1a1a2e 100%);
+            z-index: 99999; /* Por encima de absolutamente todo */
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        @media (max-width: 767px) and (orientation: portrait) {
+            #mobile-warning-overlay {
+                display: flex; /* Solo se activa en móviles en posición vertical */
+            }
+        }
+
+        .mobile-warning-card {
+            background: #fff;
+            border-radius: 20px;
+            padding: 32px 24px;
+            max-width: 400px;
+            width: 100%;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            text-align: center;
+            color: #2c3e50;
+        }
+
+        .warning-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .mobile-warning-card h3 {
+            font-size: 19px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            color: #2c3e50;
+        }
+
+        .mobile-warning-card p {
+            font-size: 13px;
+            color: #7f8c8d;
+            line-height: 1.5;
+            margin-bottom: 20px;
+        }
+
+        .warning-tips {
+            background: #f0f4f8;
+            border-radius: 12px;
+            padding: 16px;
+            text-align: left;
+            margin-bottom: 24px;
+        }
+
+        .warning-tips p {
+            color: #2c3e50;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .warning-tips ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .warning-tips li {
+            font-size: 12px;
+            color: #5d6d7e;
+            margin-bottom: 6px;
+            line-height: 1.4;
+        }
+
+        .btn-warning-dismiss {
+            width: 100%;
+            background: #3498db;
+            color: #fff;
+            border: none;
+            padding: 12px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-warning-dismiss:hover {
+            background: #2980b9;
+        }
+        
         /* RESPONSIVE */
         @media (max-width: 768px) {
             .navbar-menu {
@@ -219,6 +312,31 @@
     <div class="footer">
         <p>&copy; 2026 Palladium Hotel Group | TFM Data Science</p>
     </div>
+    
+    <!-- CAPA DE ADVERTENCIA PARA MÓVILES (UX FALLBACK) -->
+    <div id="mobile-warning-overlay">
+        <div class="mobile-warning-card">
+            <div class="warning-icon">📊</div>
+            <h3>Panel optimizado para escritorio</h3>
+            <p>Esta aplicación de analítica avanzada y explicabilidad <strong>SHAP</strong> contiene gráficos y tablas densas diseñados para pantallas de ordenador o tablet.</p>
+            
+            <div class="warning-tips">
+                <p><strong>Para la mejor experiencia durante la evaluación:</strong></p>
+                <ul>
+                    <li>💻 Abre el enlace en tu portátil o tablet si es posible.</li>
+                    <li>🔄 O simplemente <strong>gira tu móvil en horizontal</strong> (modo paisaje) para ampliar la vista.</li>
+                </ul>
+            </div>
+            
+            <button class="btn-warning-dismiss" onclick="dismissMobileWarning()">Acceder de todos modos</button>
+        </div>
+    </div>
+
+    <script>
+    function dismissMobileWarning() {
+        document.getElementById('mobile-warning-overlay').style.display = 'none';
+    }
+    </script>
     
     {% block extra_js %}{% endblock %}
 </body>
